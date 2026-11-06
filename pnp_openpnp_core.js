@@ -103,13 +103,13 @@
 
   function partsXml(parts) {
     return '<openpnp-parts>\n' + parts.map((q) =>
-      `   <part id="${esc(q.id)}" name="${esc(q.name)}" height-units="Millimeters" height="${q.height}" through-board-depth-units="Millimeters" through-board-depth="0.0" package-id="${esc(q.pkg)}" speed="1.0" pick-retry-count="0"/>`).join('\n') + '\n</openpnp-parts>\n';
+      `   <part id="${esc(q.id)}" name="${esc(q.name)}" height-units="Millimeters" height="${q.height}" package-id="${esc(q.pkg)}" speed="1.0" pick-retry-count="0"/>`).join('\n') + '\n</openpnp-parts>\n';
   }
 
   function packagesXml(pkgs) {
     return '<openpnp-packages>\n' + pkgs.map((k) =>
       `   <package version="1.1" id="${esc(k.id)}" description="${esc(k.desc)}" pick-vacuum-level="0.0" place-blow-off-level="0.0">\n` +
-      `      <footprint units="Millimeters" body-width="${k.w}" body-height="${k.h}" outer-dimension="0.0" inner-dimension="0.0" pad-count="0" pad-pitch="0.0" pad-across="0.0" pad-roundness="0.0"${k.fid ? '>\n         <pad name="1" x="0.0" y="0.0" width="1.0" height="1.0" rotation="0.0" mark="false" roundness="100.0"/>\n      </footprint>' : '/>'}\n` +
+      `      <footprint units="Millimeters" body-width="${k.w}" body-height="${k.h}" outer-dimension="0.0" inner-dimension="0.0" pad-count="0" pad-pitch="0.0" pad-across="0.0" pad-roundness="0.0"${k.fid ? '>\n         <pad name="1" x="0.0" y="0.0" width="1.0" height="1.0" rotation="0.0" roundness="100.0"/>\n      </footprint>' : '/>'}\n` +
       `      <compatible-nozzle-tip-ids class="java.util.ArrayList">${k.tip ? `\n         <string>${k.tip}</string>\n      ` : ''}</compatible-nozzle-tip-ids>\n   </package>`).join('\n') + '\n</openpnp-packages>\n';
   }
 
@@ -224,6 +224,7 @@
       `Merge (OpenPnP must be CLOSED: it rewrites its config when it exits)`,
       `  python merge_into_openpnp.py            -> ~/.openpnp2 (backup made first: *.bak-<time>)`,
       `  python merge_into_openpnp.py <config dir>`,
+      `  python merge_into_openpnp.py --undo      -> put back the files from the newest backup`,
       `  It adds or replaces these parts and packages by id, and replaces every feeder whose id starts with PLAN-.`,
       `  Nothing else in machine.xml is touched. Run it again after re-exporting.`,
       `Then: File > Open Job > ${name}.job.xml.`,
@@ -241,6 +242,7 @@
   const MERGE_PY = String.raw`"""Merge the generated parts, packages and PLAN- strip feeders into an OpenPnP config (OpenPnP must be closed).
 
     python merge_into_openpnp.py [config dir]      (default: ~/.openpnp2)
+    python merge_into_openpnp.py --undo [config dir]   restore the files from the newest backup
 
 Parts and packages are added or replaced by id; every feeder with an id starting with PLAN- is replaced by the ones in
 feeders.xml. A copy of each file is saved as <file>.bak-<time> first. Nothing else is changed.
@@ -249,7 +251,9 @@ import re, shutil, sys, time
 from pathlib import Path
 
 here = Path(__file__).resolve().parent
-cfg = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.home() / ".openpnp2"
+args = [a for a in sys.argv[1:] if a != "--undo"]
+do_undo = "--undo" in sys.argv[1:]
+cfg = Path(args[0]) if args else Path.home() / ".openpnp2"
 stamp = time.strftime("%Y%m%d-%H%M%S")
 
 
@@ -292,9 +296,25 @@ def merge_feeders():
     print("%s: removed %d old PLAN- feeder(s), added %d" % (dst, n_old, len(items)))
 
 
+def undo():
+    # restore the newest backup set (all files of one run share the same stamp)
+    baks = sorted(cfg.glob("*.xml.bak-*"), key=lambda p: p.name.rsplit(".bak-", 1)[1])
+    if not baks:
+        sys.exit("no *.bak-<time> files in %s: nothing to undo" % cfg)
+    last = baks[-1].name.rsplit(".bak-", 1)[1]
+    for b in baks:
+        if b.name.endswith(".bak-" + last):
+            shutil.copy2(b, cfg / b.name.rsplit(".bak-", 1)[0])
+            print("restored %s from %s" % (b.name.rsplit(".bak-", 1)[0], b.name))
+    print("Undone (backups kept). Start OpenPnP.")
+
+
 if __name__ == "__main__":
     if not cfg.is_dir():
         sys.exit("config dir not found: %s" % cfg)
+    if do_undo:
+        undo()
+        sys.exit(0)
     merge_lib("parts.xml", "part", "openpnp-parts")
     merge_lib("packages.xml", "package", "openpnp-packages")
     merge_feeders()
