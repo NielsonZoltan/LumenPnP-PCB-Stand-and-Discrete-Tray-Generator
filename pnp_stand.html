@@ -1,0 +1,1046 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LumenPnP Stand Generator</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --ink: #1d2330; --muted: #5d6677; --line: #d9dde4;
+  --accent: #2463eb; --accent-ink: #ffffff; --ok: #1f8a4c; --bad: #c83232; --warn: #b7791f;
+  --plate: #23272f; --plate-edge: #3a404c; --hole: #d6a65a; --hole-off: #4a505c; --label: #c9b27a;
+  --pcb: rgba(31, 138, 76, .55); --pcb-edge: #2fd07a; --stand: rgba(64, 140, 255, .55); --stand-edge: #8db8ff;
+  --zone: rgba(200, 50, 50, .28); --zone-edge: #ff7070; --input: #ffffff;
+  --tray: rgba(235, 140, 40, .30); --tray-lane: rgba(235, 140, 40, .55); --tray-edge: #ffb054;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b; --panel: #1a1e26; --ink: #e5e8ee; --muted: #98a1b3; --line: #2c323d;
+    --accent: #5b8cff; --accent-ink: #0b0e13; --ok: #3ccf7f; --bad: #ff6b6b; --warn: #f0b54a; --input: #12151b;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151b; --panel: #1a1e26; --ink: #e5e8ee; --muted: #98a1b3; --line: #2c323d;
+  --accent: #5b8cff; --accent-ink: #0b0e13; --ok: #3ccf7f; --bad: #ff6b6b; --warn: #f0b54a; --input: #12151b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.app { display: grid; grid-template-columns: 360px 1fr; height: 100vh; }
+aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 10px 14px 40px; }
+main { position: relative; overflow: hidden; display: flex; flex-direction: column; }
+h1 { font-size: 16px; margin: 4px 0 2px; }
+.sub { color: var(--muted); margin: 0 0 8px; }
+details { border-top: 1px solid var(--line); padding: 6px 0; }
+summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 3px 0; }
+label > span { color: var(--muted); }
+input, select, textarea, button { font: inherit; color: var(--ink); }
+input[type=number], input[type=text], select, textarea { background: var(--input); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; }
+input[type=number] { width: 78px; }
+aside select { max-width: 200px; }
+aside { overflow-x: hidden; }
+label > span { min-width: 0; }
+input[type=text].w { width: 120px; }
+textarea { width: 100%; min-height: 110px; font: 12px/1.35 ui-monospace, Consolas, monospace; }
+button { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.err { color: var(--bad); white-space: pre-wrap; }
+.okc { color: var(--ok); }
+.muted { color: var(--muted); }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+th, td { border-bottom: 1px solid var(--line); padding: 2px 3px; text-align: left; }
+td input[type=number] { width: 58px; }
+.plate-cfg { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; margin: 4px 0; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.toolbar .status { margin-left: auto; font-weight: 600; }
+#view { flex: 1; width: 100%; height: 100%; touch-action: none; cursor: grab; background: var(--bg); user-select: none; -webkit-user-select: none; }
+.toolbar, .legend { user-select: none; -webkit-user-select: none; }#view.dragging { cursor: grabbing; }
+.legend { position: absolute; left: 10px; bottom: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--muted); max-width: 520px; }
+.out { font: 12px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+#sheet { display: none; }
+@media (max-width: 800px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 70vh; height: auto; }
+  aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 16px; }
+}
+@media print {
+  aside, .toolbar, .legend { display: none !important; }
+  .app { display: block; height: auto; }
+  main { overflow: visible; }
+  #view { height: 120mm; }
+  #sheet { display: block; padding: 0 4mm; color: #000; }
+  body { background: #fff; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside>
+  <h1>LumenPnP stand generator</h1>
+  <p class="sub">PCB stands for the staging-plate grid: pick the grid holes, place the board, export STL and OpenSCAD files.</p>
+
+  <details open>
+    <summary>1 · Machine</summary>
+    <label><span>Profile</span><select id="profile"></select></label>
+    <label><span>Plates</span><select id="nPlates"><option>1</option><option selected>2</option><option>3</option></select></label>
+    <div id="plateCfg"></div>
+    <label><span>Row 1 at</span><select id="row1"><option value="left">left (low X)</option><option value="right">right (high X)</option></select></label>
+    <details>
+      <summary class="muted">Plate dimensions</summary>
+      <label><span>Length (mm)</span><input type="number" id="pl_length" step="1"></label>
+      <label><span>Width (mm)</span><input type="number" id="pl_width" step="1"></label>
+      <label><span>Hole pitch (mm)</span><input type="number" id="pl_pitch" step="0.1"></label>
+      <label><span>First hole from edge</span><input type="number" id="pl_edge" step="0.1"></label>
+      <label><span>Gap between plates</span><input type="number" id="pl_gap" step="0.1"></label>
+      <label><span>Plate screw inset</span><input type="number" id="pl_screwInset" step="0.5"></label>
+      <label><span>Plate screw keep-out ⌀</span><input type="number" id="pl_screwKeepD" step="0.5"></label>
+    </details>
+    <div class="muted" style="margin-top:6px">Keep-outs (one per line): <code>camera d20 52</code>, <code>circle E12 30</code>, <code>rect d16 g19 [margin]</code>, <code>block c5 e5</code>, <code>circle@ x y d</code>, <code>rect@ x0 y0 x1 y1</code></div>
+    <textarea id="keepouts" spellcheck="false"></textarea>
+    <div id="koErr" class="err"></div>
+    <div class="muted">Click a grid hole in the view to block or unblock it. <span id="clickBlocked"></span></div>
+  </details>
+
+  <details open>
+    <summary>2 · PCB</summary>
+    <div class="row"><button class="primary" id="openPcb">Open .kicad_pcb…</button><input type="file" id="pcbFile" accept=".kicad_pcb" hidden></div>
+    <label><span>Min hole ⌀ on import</span><input type="number" id="minDrill" value="1.0" step="0.1"></label>
+    <div class="row">
+      <label style="margin:0"><span>W</span><input type="number" id="manW" value="80" step="0.1"></label>
+      <label style="margin:0"><span>H</span><input type="number" id="manH" value="60" step="0.1"></label>
+      <button id="manRect" title="Rectangle with a hole in each corner, 4 mm in">Plain rectangle</button>
+    </div>
+    <div id="pcbInfo" class="muted"></div>
+    <div id="pcbReport" class="muted" style="margin-top:3px"></div>
+    <label><span>Board thickness (from file)</span><input type="number" id="sp_pcbThick" step="0.01" min="0.2" title="Sets the pin length and the corner wall height"></label>
+    <label><span>Fix the board by</span><select id="pcbMode"><option value="holes">mounting / tooling holes</option><option value="corners">board corners (L-wall stands)</option></select></label>
+    <div id="cornerBox" class="row"></div>
+    <table id="holeTable"><thead><tr><th>mount</th><th>ref</th><th>u</th><th>v</th><th>⌀</th><th></th></tr></thead><tbody></tbody></table>
+    <div class="row"><button id="addHole">+ hole</button><span class="muted">u/v in mm from the board's lower-left corner, top view.</span></div>
+  </details>
+
+  <details open>
+    <summary>3 · Stand</summary>
+    <label><span>Height: plate → PCB bottom</span><input type="number" id="sp_height" step="0.5"></label>
+    <label><span>Bolts per stand</span><select id="sp_bolts"><option value="2">2 (angle locked)</option><option value="1">1 (can swing)</option></select></label>
+    <label><span>Top of bolt hole</span><select id="sp_pocket"><option value="hex">hex nut trap</option><option value="round">screw-head counterbore</option><option value="none">plain hole</option></select></label>
+    <label><span>Bolt clearance ⌀</span><input type="number" id="sp_boltD" step="0.1"></label>
+    <label><span>Nut across flats</span><input type="number" id="sp_nutAF" step="0.1"></label>
+    <label><span>Head ⌀</span><input type="number" id="sp_headD" step="0.1"></label>
+    <label><span>Floor under nut</span><input type="number" id="sp_pocketFloor" step="0.05" min="0.4" title="Plastic left under the nut (or screw head). The pocket fills the body above it, so it is body top − this"></label>
+    <label><span>Pocket clearance</span><input type="number" id="sp_pocketClr" step="0.05"></label>
+    <label><span>PCB fixing</span><select id="sp_iface"><option value="pin">printed locating pin</option><option value="hole">blind hole (dowel / screw / insert)</option></select></label>
+    <label><span>Clearance under board</span><input type="number" id="sp_underClear" step="0.5" min="0" title="Tallest part on the side facing the plate, e.g. the top-side parts when placing the bottom side. Raises the step-up (and the height if needed)"></label>
+    <label><span>Step-up (body below PCB by)</span><input type="number" id="sp_stepH" step="0.5" min="0" title="Only the boss under the pin (or the corner pad) reaches the PCB; the rest of the body is this much lower. 0 = flat top"></label>
+    <label><span>Boss ⌀ under pin (0 = auto)</span><input type="number" id="sp_bossD" step="0.1" min="0"></label>
+    <label><span>Pin clearance (radial)</span><input type="number" id="sp_pinClr" step="0.05"></label>
+    <label><span>Pin tip above board top</span><input type="number" id="sp_pinAbove" step="0.1" title="Pin length = board thickness + this. Negative = the pin stops inside the hole"></label>
+    <label><span>Blind hole ⌀ (0 = PCB hole)</span><input type="number" id="sp_ifaceHoleD" step="0.1"></label>
+    <label><span>Blind hole depth</span><input type="number" id="sp_ifaceHoleDepth" step="0.5"></label>
+    <label><span>Wall</span><input type="number" id="sp_wall" step="0.1"></label>
+    <label><span>Min pad radius under PCB</span><input type="number" id="sp_padMin" step="0.1"></label>
+    <label><span>Max arm (PCB hole → bolt)</span><input type="number" id="sp_maxArm" step="1"></label>
+    <label><span>Max bolt spacing</span><input type="number" id="sp_maxPair" step="1"></label>
+    <label><span>Penalty: bolt under PCB</span><input type="number" id="sp_underPenalty" step="1"></label>
+    <label><span>Gap between stands</span><input type="number" id="sp_standGap" step="0.5"></label>
+    <label><span>Engrave number on side</span><select id="sp_label"><option value="1">yes (1 = board lower-left, anticlockwise)</option><option value="0">no</option></select></label>
+    <label><span>Number height / depth</span><span><input type="number" id="sp_labelH" step="0.5"> <input type="number" id="sp_labelDepth" step="0.1"></span></label>
+    <div class="muted" style="margin-top:6px">Corner mode</div>
+    <label><span>Support pad (square)</span><input type="number" id="sp_cornerPad" step="0.5"></label>
+    <label><span>Edge clearance</span><input type="number" id="sp_cornerGap" step="0.05"></label>
+    <label><span>L-wall thickness</span><input type="number" id="sp_cornerWall" step="0.1"></label>
+    <label><span>L-wall top below board top</span><input type="number" id="sp_lipBelow" step="0.1"></label>
+    <div class="row"><button id="spReset" title="Back to the built-in defaults (our stand: 8.6 mm riser, 6.14 mm body, 5.34 mm nut, 1.93 mm under it). Keeps the board thickness.">Reset stand to defaults</button></div>
+  </details>
+
+  <details open>
+    <summary>4 · Placement</summary>
+    <div class="row">
+      <label style="margin:0"><span>X</span><input type="number" id="pX" step="0.5"></label>
+      <label style="margin:0"><span>Y</span><input type="number" id="pY" step="0.5"></label>
+      <button id="rotBtn" title="R">Rotate 90°</button>
+    </div>
+    <label><span>Side up</span><select id="sideUp"><option value="top">top (1st pass)</option><option value="bottom">bottom (2nd pass, board flipped)</option></select></label>
+    <label><span>Snap while dragging (mm)</span><input type="number" id="snap" value="0.5" step="0.5" min="0"></label>
+    <label><span>Auto-place prefers</span>
+      <select id="prefer">
+        <option value="here">near where the board is now</option>
+        <option value="camera">near the bottom camera</option>
+        <option value="front-left">front-left corner</option>
+        <option value="any">shortest stands, anywhere</option>
+      </select></label>
+    <div class="row" id="rotAllowed"></div>
+    <div class="row"><button class="primary" id="autoBtn">Auto-place</button><button id="refineBtn" title="Search ±40 mm around the board, 0.5 mm steps">Refine here</button></div>
+    <div id="placeStatus"></div>
+    <div id="standList" class="out" style="margin-top:6px"></div>
+  </details>
+
+  <details open>
+    <summary>5 · Export</summary>
+    <div class="row">
+      <button class="primary" id="stlBtn" title="A .zip with a folder holding one STL per stand, named number_ref">Stands (.zip, one STL each)</button>
+      <button id="stlAllBtn" title="All stands laid out side by side in a single STL">All in one STL</button>
+      <button id="scadBtn">OpenSCAD</button>
+      <button id="printBtn">Print sheet</button>
+    </div>
+    <div class="row" id="perStand"></div>
+    <details>
+      <summary class="muted">OpenPnP board location</summary>
+      <label><span>Board origin</span><select id="originSel"><option value="bboxLL">board lower-left (bbox)</option><option value="aux">drill/place origin</option><option value="page">KiCad page origin</option></select></label>
+      <label><span>Reference hole</span><input type="text" class="w" id="refHole" placeholder="e.g. b2"></label>
+      <label><span>Its machine X / Y</span><span><input type="number" id="refX" step="0.01"> <input type="number" id="refY" step="0.01"></span></label>
+      <label><span>Machine X runs toward row 1</span><input type="checkbox" id="flipX"></label>
+      <label><span>Machine Y runs toward the front</span><input type="checkbox" id="flipY"></label>
+      <div id="opOut" class="out"></div>
+    </details>
+    <div class="row"><button id="saveBtn">Save project</button><button id="loadBtn">Load project</button><input type="file" id="loadFile" accept=".json" hidden></div>
+  </details>
+
+  <details open>
+    <summary>6 · Cut-tape trays</summary>
+    <div class="muted">One section of cut tape per BOM line (grouped by value + footprint like <code>bom_reels.py</code>). Sections share lanes, lanes share trays; trays bolt to the grid like the stands. Drag a tray to move it.</div>
+    <div class="row"><button class="primary" id="openBom" title="KiCad BOM CSV (Qty per board), or a DigiKey order CSV (Qty = what you ordered; needs the .kicad_pcb open)">Open BOM / DigiKey order .csv…</button><input type="file" id="bomFile" accept=".csv" hidden></div>
+    <div id="bomInfo" class="muted"></div>
+    <label><span>Boards per run</span><input type="number" id="tp_boards" step="1" min="1"></label>
+    <label><span>Spare parts per line</span><input type="number" id="tp_spares" step="1" min="0"></label>
+    <label><span>Empty pockets at the start</span><input type="number" id="tp_leader" step="1" min="0"></label>
+    <label><span>Max tray width</span><input type="number" id="tp_maxTrayW" step="5" min="20"></label>
+    <label><span>Lane length (0 = least area)</span><input type="number" id="tp_laneLen" step="15" min="0"></label>
+    <label><span>Sections per lane</span><select id="tp_series"><option value="1">several, end to end</option><option value="0">one (one lane per line)</option></select></label>
+    <details>
+      <summary class="muted">Tray dimensions</summary>
+      <label><span>Channel = tape + </span><input type="number" id="tp_chClr" step="0.05"></label>
+      <label><span>Rib between lanes</span><input type="number" id="tp_rib" step="0.1"></label>
+      <label><span>Side wall</span><input type="number" id="tp_sideWall" step="0.1"></label>
+      <label><span>Floor under pocket relief</span><input type="number" id="tp_base" step="0.1"></label>
+      <label><span>Paper tape recess</span><input type="number" id="tp_recessPaper" step="0.1"></label>
+      <label><span>Embossed shoulder recess</span><input type="number" id="tp_recessEmb" step="0.1"></label>
+      <label><span>Embossed pocket relief</span><input type="number" id="tp_groove" step="0.1"></label>
+      <label><span>Label block length</span><input type="number" id="tp_labelBlock" step="0.5"></label>
+      <label><span>Number height / depth</span><span><input type="number" id="tp_labelH" step="0.5"> <input type="number" id="tp_labelDepth" step="0.1"></span></label>
+      <label><span>Nut height (cap = floor + this)</span><input type="number" id="tp_nutH" step="0.1"></label>
+      <label><span>Shortest section</span><input type="number" id="tp_minSection" step="1"></label>
+      <label><span>Slack at section end</span><input type="number" id="tp_endClr" step="0.5"></label>
+      <label><span>Clearance to other things</span><input type="number" id="tp_gap" step="0.5"></label>
+    </details>
+    <div style="overflow-x:auto"><table id="lineTable"><thead><tr><th title="put in a tray">tray</th><th>#</th><th>value</th><th>qty</th><th>parts</th><th>tape</th><th>pitch</th><th>carrier</th></tr></thead><tbody></tbody></table></div>
+    <div class="row"><button class="primary" id="trayPackBtn" title="Repack the sections and auto-place every tray (forgets trays you moved)">Pack + place trays</button><button id="trayZipBtn" title="One STL per tray and sections.csv in a .zip">Trays (.zip)</button><button id="trayCsvBtn">Sections CSV</button></div>
+    <div id="trayStatus"></div>
+    <div id="trayList" class="out" style="margin-top:6px"></div>
+  </details>
+
+  <details open>
+    <summary>7 · OpenPnP project</summary>
+    <div class="muted">Starter files for OpenPnP 2.4: board (placements from the .kicad_pcb, fiducials), job (board location from this placement), parts + packages (one per BOM line), a strip feeder per tray section, and a merge script. Coordinates are ballparks: teach on the machine. Set the reference hole in <i>5 · OpenPnP board location</i> to get machine X/Y.</div>
+    <label><span>Lines not in a tray</span><select id="op_notInTray"><option value="ignore">Ignore (hand place)</option><option value="place">Place (feeder set up on the machine)</option></select></label>
+    <label><span>Plate top Z (machine)</span><input type="number" id="op_plateZ" step="0.1" title="Machine Z of the staging plate top; board Z = this + stand height + board thickness, feeder Z = this + tape surface"></label>
+    <div class="row"><button class="primary" id="opBtn">OpenPnP project (.zip)</button></div>
+    <div id="opNotes" class="muted"></div>
+  </details>
+</aside>
+
+<main>
+  <div class="toolbar">
+    <button id="fitBtn">Fit</button>
+    <button id="themeBtn">Theme</button>
+    <span class="muted">Drag the board · drag empty space to pan · wheel to zoom · R rotates · click a hole to block it</span>
+    <span class="status" id="status"></span>
+  </div>
+  <svg id="view" xmlns="http://www.w3.org/2000/svg"><g id="gStatic"></g><g id="gDyn"></g></svg>
+  <div class="legend" id="legend"></div>
+  <div id="sheet"></div>
+</main>
+</div>
+
+<script src="vendor/jscad-modeling.min.js"></script>
+<script>if (!window.jscadModeling) document.write('<script src="https://unpkg.com/@jscad/modeling@2.12.5/dist/jscad-modeling.min.js"><\/script>');</script>
+<script src="pnp_stand_core.js?v=4"></script>
+<script src="pnp_tray_core.js?v=2"></script>
+<script src="pnp_openpnp_core.js?v=1"></script>
+<script>
+'use strict';
+const S = window.PnpStand, TR = window.PnpTray, OP = window.PnpOpenPnP;
+// the browser can keep an old copy of the core after an update; say so instead of failing later
+const CORE_VERSION = 4, TRAY_VERSION = 2, OPENPNP_VERSION = 1;
+if (!S || S.VERSION !== CORE_VERSION || !TR || TR.VERSION !== TRAY_VERSION || !OP || OP.VERSION !== OPENPNP_VERSION) {
+  addEventListener('DOMContentLoaded', () => {
+    const b = document.createElement('div');
+    b.textContent = `pnp_stand_core.js / pnp_tray_core.js is an old cached copy (needs core ${CORE_VERSION}, trays ${TRAY_VERSION}, OpenPnP ${OPENPNP_VERSION}). Press Ctrl+F5 to reload.`;
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99;padding:8px 12px;background:#b3261e;color:#fff;font:14px system-ui';
+    document.body.appendChild(b);
+  });
+}
+const $ = (id) => document.getElementById(id);
+const NS = 'http://www.w3.org/2000/svg';
+const LS_KEY = 'pnpStand.v1';
+
+// ------------------------------------------------------------ state
+const state = {
+  profile: 'v3.1',
+  cfg: JSON.parse(JSON.stringify(S.PROFILES['v3.1'])),
+  keepouts: S.PROFILES['v3.1'].keepouts,
+  clickBlocked: [],
+  sp: { ...S.DEFAULT_STAND },
+  pcb: null,
+  place: { cx: 120, cy: 120, rot: 0 },
+  rotAllowed: [0, 90, 180, 270],
+  prefer: 'here',
+  snap: 0.5,
+  openpnp: { origin: 'bboxLL', hole: '', x: '', y: '', flipX: false, flipY: false },
+  tray: { tp: { ...TR.DEFAULT_TRAY }, bom: null, pos: {}, layout: null },
+  op: { notInTray: 'ignore', plateZ: 0 },
+};
+let M = null, KO = null, RES = null, TRAYS = null;
+
+function loadLocal() {
+  try {
+    const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+    if (s && s.cfg) Object.assign(state, s, { sp: { ...S.DEFAULT_STAND, ...s.sp }, tray: mergeTray(s.tray), op: { notInTray: 'ignore', plateZ: 0, ...(s.op || {}) } });
+  } catch (e) { /* storage unavailable */ }
+}
+function mergeTray(t) { return { bom: null, pos: {}, layout: null, ...(t || {}), tp: { ...TR.DEFAULT_TRAY, ...((t && t.tp) || {}) } }; }
+function saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ } }
+
+// ------------------------------------------------------------ machine form
+function buildProfileSelect() {
+  const sel = $('profile');
+  sel.innerHTML = Object.entries(S.PROFILES).map(([k, p]) => `<option value="${k}">${p.label}</option>`).join('');
+  sel.value = state.profile;
+}
+function plateCfgForm() {
+  const box = $('plateCfg');
+  box.innerHTML = '';
+  state.cfg.plates.forEach((pl, i) => {
+    const d = document.createElement('div');
+    d.className = 'plate-cfg';
+    d.innerHTML = `<label><span>Plate ${i + 1} (front → rear)</span><input type="text" class="w" data-k="name" value="${pl.name}"></label>
+      <label><span>Letters</span><select data-k="lower"><option value="1">lowercase a–g</option><option value="0">UPPERCASE A–G</option></select></label>
+      <label><span>A at</span><select data-k="aAt"><option value="front">front edge</option><option value="rear">rear edge</option></select></label>
+      <label><span>Name prefix</span><input type="text" class="w" data-k="prefix" value="${pl.prefix || ''}" placeholder="e.g. 3 → 3D20"></label>`;
+    d.querySelector('[data-k=lower]').value = pl.lower ? '1' : '0';
+    d.querySelector('[data-k=aAt]').value = pl.aAt;
+    d.querySelectorAll('[data-k]').forEach((el) => el.addEventListener('change', () => {
+      const k = el.dataset.k;
+      pl[k] = k === 'lower' ? el.value === '1' : el.value;
+      rebuildMachine();
+    }));
+    box.appendChild(d);
+  });
+}
+function setPlateCount(n) {
+  const cur = state.cfg.plates;
+  while (cur.length < n) {
+    const i = cur.length;
+    cur.push(i === 1 ? { name: 'Upper (rear)', lower: false, prefix: '', aAt: 'rear' } : { name: 'Plate ' + (i + 1), lower: false, prefix: String(i + 1), aAt: 'rear' });
+  }
+  cur.length = n;
+}
+const PL_KEYS = ['length', 'width', 'pitch', 'edge', 'gap', 'screwInset', 'screwKeepD'];
+function machineFormFromState() {
+  buildProfileSelect();
+  $('nPlates').value = String(state.cfg.plates.length);
+  $('row1').value = state.cfg.row1;
+  PL_KEYS.forEach((k) => { $('pl_' + k).value = state.cfg.plate[k]; });
+  $('keepouts').value = state.keepouts;
+  plateCfgForm();
+}
+
+function rebuildMachine() {
+  M = S.buildMachine(state.cfg);
+  reparseKeepouts();
+  drawStatic();
+  update();
+}
+function reparseKeepouts() {
+  KO = S.parseKeepouts(M, state.keepouts);
+  for (const n of state.clickBlocked) KO.blocked.add(n);
+  $('koErr').textContent = KO.errors.join('\n');
+  $('clickBlocked').textContent = state.clickBlocked.length ? 'Blocked by click: ' + state.clickBlocked.join(' ') + ' ' : '';
+  if (state.clickBlocked.length) {
+    const a = document.createElement('a'); a.href = '#'; a.textContent = '(clear)';
+    a.onclick = (e) => { e.preventDefault(); state.clickBlocked = []; reparseKeepouts(); drawStatic(); update(); };
+    $('clickBlocked').appendChild(a);
+  }
+}
+
+// ------------------------------------------------------------ stand form
+const SP_KEYS = ['height', 'bolts', 'pocket', 'boltD', 'nutAF', 'headD', 'pocketFloor', 'pocketClr', 'iface', 'underClear', 'stepH', 'bossD', 'pinClr', 'pinAbove', 'ifaceHoleD', 'ifaceHoleDepth', 'wall', 'padMin', 'maxArm', 'maxPair', 'underPenalty', 'standGap',
+  'label', 'labelH', 'labelDepth', 'cornerPad', 'cornerGap', 'cornerWall', 'lipBelow', 'pcbThick'];
+/** stand settings with board-derived values (pin length, wall height, raised step-up for clearance) */
+const ES = () => S.effectiveStand(state.sp);
+function standFormFromState() { SP_KEYS.forEach((k) => { $('sp_' + k).value = k === 'label' ? (state.sp.label ? '1' : '0') : state.sp[k]; }); }
+$('spReset').onclick = () => { state.sp = { ...S.DEFAULT_STAND, pcbThick: state.sp.pcbThick }; standFormFromState(); update(); };
+SP_KEYS.forEach((k) => $('sp_' + k).addEventListener('input', (e) => {
+  if (k === 'label') { state.sp.label = e.target.value === '1'; update(); return; }
+  const v = e.target.tagName === 'SELECT' && isNaN(+e.target.value) ? e.target.value : +e.target.value;
+  if (v === '' || (typeof v === 'number' && !isFinite(v))) return;
+  state.sp[k] = v;
+  update();
+}));
+
+// ------------------------------------------------------------ PCB
+function setPcb(pcb, center) {
+  state.pcb = pcb;
+  if (center) {
+    const ex = M.extent;
+    state.place = { cx: Math.max(ex.x0 + pcb.W / 2, Math.min(ex.x1 - pcb.W / 2, state.place.cx)), cy: (ex.y0 + ex.y1) / 2, rot: 0, flip: !!state.place.flip };
+  }
+  if (pcb.thickness) { state.sp.pcbThick = pcb.thickness; $('sp_pcbThick').value = pcb.thickness; }
+  holeTable();
+  update();
+}
+function holeTable() {
+  const tb = $('holeTable').querySelector('tbody');
+  tb.innerHTML = '';
+  const p = state.pcb;
+  $('pcbInfo').textContent = p ? `${p.name}: ${p.W.toFixed(2)} × ${p.H.toFixed(2)} mm, ${p.holes.length} hole(s)` : 'No board yet: open a .kicad_pcb or make a plain rectangle.';
+  $('pcbReport').textContent = p && p.report ? 'Import: ' + p.report : '';
+  if (!p) return;
+  if (!p.mode) p.mode = 'holes';
+  if (!p.corners) p.corners = [true, true, true, true];
+  $('pcbMode').value = p.mode;
+  $('holeTable').style.display = p.mode === 'holes' ? '' : 'none';
+  $('addHole').parentElement.style.display = p.mode === 'holes' ? '' : 'none';
+  const cb = $('cornerBox');
+  cb.innerHTML = '';
+  if (p.mode === 'corners') {
+    cb.innerHTML = '<span class="muted">Corners:</span>';
+    S.CORNERS.forEach((c, i) => {
+      const l = document.createElement('label'); l.style.margin = '0';
+      l.innerHTML = `<input type="checkbox" ${p.corners[i] ? 'checked' : ''}> ${i + 1} ${c.name}`;
+      l.querySelector('input').onchange = (e) => { p.corners[i] = e.target.checked; update(); };
+      cb.appendChild(l);
+    });
+  }
+  p.holes.forEach((h, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><input type="checkbox" ${h.use ? 'checked' : ''} data-k="use"></td>
+      <td><input type="text" style="width:52px" value="${h.ref}" data-k="ref" title="${h.note || ''}"></td>
+      <td><input type="number" step="0.01" value="${h.u}" data-k="u"></td>
+      <td><input type="number" step="0.01" value="${h.v}" data-k="v"></td>
+      <td><input type="number" step="0.05" value="${h.d}" data-k="d"></td>
+      <td><button data-del title="Remove">×</button></td>`;
+    tr.querySelectorAll('[data-k]').forEach((el) => el.addEventListener('input', () => {
+      const k = el.dataset.k;
+      h[k] = k === 'use' ? el.checked : k === 'ref' ? el.value : +el.value;
+      update();
+    }));
+    tr.querySelector('[data-del]').onclick = () => { p.holes.splice(i, 1); holeTable(); update(); };
+    tb.appendChild(tr);
+  });
+}
+$('openPcb').onclick = () => $('pcbFile').click();
+$('pcbFile').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  e.target.value = ''; // so opening the same file again after editing it in KiCad still fires
+  if (!f) return;
+  try {
+    const pcb = S.importKicadPcb(await f.text(), f.name.replace(/\.kicad_pcb$/, ''), { minDrill: +$('minDrill').value || 1 });
+    setPcb(pcb, true);
+    if (pcb.mode === 'corners') setStatus('No mounting holes on this board: switched to corner stands (see "2 · PCB")', 'bad');
+  } catch (err) { setStatus('Import failed: ' + err.message, 'bad'); }
+});
+$('manRect').onclick = () => {
+  const W = +$('manW').value, H = +$('manH').value, i = 4;
+  setPcb(S.rectPcb(W, H, [
+    { ref: 'H1', u: i, v: i, d: 3.2, use: true }, { ref: 'H2', u: W - i, v: i, d: 3.2, use: true },
+    { ref: 'H3', u: W - i, v: H - i, d: 3.2, use: true }, { ref: 'H4', u: i, v: H - i, d: 3.2, use: true }], 'rect ' + W + 'x' + H), true);
+};
+$('pcbMode').addEventListener('change', (e) => { if (state.pcb) { state.pcb.mode = e.target.value; holeTable(); update(); } });
+$('addHole').onclick = () => {
+  if (!state.pcb) return;
+  state.pcb.holes.push({ ref: 'H' + (state.pcb.holes.length + 1), u: state.pcb.W / 2, v: state.pcb.H / 2, d: 3.2, use: true });
+  holeTable(); update();
+};
+
+// ------------------------------------------------------------ view (SVG)
+const svg = $('view');
+let vb = { x: -20, y: -20, w: 700, h: 300 };
+const sy = (y) => M.extent.y1 - y; // machine Y up → SVG y down
+function applyVb() { svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); }
+function fit() {
+  const ex = M.extent, r = svg.getBoundingClientRect(), pad = 18;
+  const w = ex.x1 - ex.x0 + 2 * pad, h = ex.y1 - ex.y0 + 2 * pad;
+  const ar = (r.width || 800) / (r.height || 400);
+  const vw = w / h > ar ? w : h * ar, vh = vw / ar;
+  vb = { x: (ex.x0 + ex.x1) / 2 - vw / 2, y: (ex.y1 - ex.y0) / 2 - vh / 2, w: vw, h: vh };
+  applyVb();
+}
+const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function drawStatic() {
+  const g = $('gStatic');
+  g.innerHTML = '';
+  const P = M.P;
+  for (const pl of M.plates) {
+    el('rect', { x: pl.x0, y: sy(pl.y1), width: pl.x1 - pl.x0, height: pl.y1 - pl.y0, rx: 6, fill: css('--plate'), stroke: css('--plate-edge'), 'stroke-width': 0.6 }, g);
+    const t = el('text', { x: pl.x0 + 4, y: sy(pl.y1) - 3, 'font-size': 6, fill: css('--muted') }, g);
+    t.textContent = pl.name;
+  }
+  for (const z of M.screws) el('circle', { cx: z.x, cy: sy(z.y), r: 2.8, fill: '#111', stroke: css('--plate-edge'), 'stroke-width': 0.5 }, g);
+  for (const z of KO.zones) {
+    if (z.type === 'circle') el('circle', { cx: z.x, cy: sy(z.y), r: z.r, fill: css('--zone'), stroke: css('--zone-edge'), 'stroke-width': 0.5, 'stroke-dasharray': '2 1.5' }, g);
+    else el('rect', { x: z.x0, y: sy(z.y1), width: z.x1 - z.x0, height: z.y1 - z.y0, fill: css('--zone'), stroke: css('--zone-edge'), 'stroke-width': 0.5, 'stroke-dasharray': '2 1.5' }, g);
+    const t = el('text', { x: z.type === 'circle' ? z.x : (z.x0 + z.x1) / 2, y: sy(z.type === 'circle' ? z.y : (z.y0 + z.y1) / 2) + 1.5, 'font-size': 4.5, 'text-anchor': 'middle', fill: css('--zone-edge') }, g);
+    t.textContent = z.label;
+  }
+  // letter labels at both ends, row numbers along the plate edges
+  for (const pl of M.plates) {
+    for (let i = 0; i < M.nCols; i++) {
+      const h = M.holes.find((q) => q.plate === pl.index && q.i === i && q.k === 1);
+      for (const x of [2.5, P.length - 2.5]) {
+        const t = el('text', { x, y: sy(h.y) + 1.4, 'font-size': 4, 'text-anchor': 'middle', fill: css('--label') }, g);
+        t.textContent = h.name.replace(/\d+$/, '');
+      }
+    }
+    for (let k = 1; k <= M.nRows; k++) {
+      const h = M.holes.find((q) => q.plate === pl.index && q.k === k && q.i === 0);
+      const yEdge = pl.cfg.aAt === 'rear' ? pl.y1 - 4 : pl.y0 + 2.2;
+      const t = el('text', { x: h.x, y: sy(yEdge), 'font-size': 3.4, 'text-anchor': 'middle', fill: css('--label') }, g);
+      t.textContent = k;
+    }
+  }
+  for (const h of M.holes) {
+    if (!h.exists) continue;
+    const blocked = KO.blocked.has(h.name);
+    const c = el('circle', { cx: h.x, cy: sy(h.y), r: P.holeD / 2 + 0.6, fill: 'rgba(0,0,0,0)', stroke: blocked ? css('--hole-off') : css('--hole'), 'stroke-width': 1.1, 'data-hole': h.name, class: 'hole' }, g);
+    el('title', {}, c).textContent = h.name + (blocked ? ' (blocked)' : '');
+    if (blocked) {
+      el('path', { d: `M${h.x - 2},${sy(h.y) - 2}L${h.x + 2},${sy(h.y) + 2}M${h.x + 2},${sy(h.y) - 2}L${h.x - 2},${sy(h.y) + 2}`, stroke: css('--bad'), 'stroke-width': 0.6, 'pointer-events': 'none' }, g);
+    }
+  }
+}
+
+function drawDyn() {
+  const g = $('gDyn');
+  g.innerHTML = '';
+  drawTrays(g);
+  const p = state.pcb;
+  if (!p) return;
+  // stands under the board
+  const rectEl = (r, attrs) => el('rect', { x: r.x0, y: sy(r.y1), width: r.x1 - r.x0, height: r.y1 - r.y0, ...attrs }, g);
+  if (RES) RES.stands.forEach((st) => {
+    const o = S.standOutline(st);
+    el('path', { d: 'M' + o.map((q) => `${q.x.toFixed(2)},${sy(q.y).toFixed(2)}`).join('L') + 'Z', fill: css('--stand'), stroke: css('--stand-edge'), 'stroke-width': 0.5 }, g);
+    if (st.kind === 'corner') st.parts.walls.forEach((w) => rectEl(w, { fill: css('--stand-edge'), stroke: 'none' }));
+    for (const b of st.bolts) {
+      el('circle', { cx: b.x, cy: sy(b.y), r: st.D.pocketR, fill: 'none', stroke: css('--stand-edge'), 'stroke-width': 0.4 }, g);
+      const t = el('text', { x: b.x, y: sy(b.y) - st.D.boltPadR - 1, 'font-size': 4.2, 'text-anchor': 'middle', 'font-weight': 700, fill: css('--stand-edge') }, g);
+      t.textContent = b.name;
+    }
+  });
+  // board
+  const bg = el('g', { id: 'pcbGroup', style: 'cursor: move' }, g);
+  const r = RES ? RES.rect : S.pcbRect(p, state.place);
+  el('rect', { x: r.x0, y: sy(r.y1), width: r.x1 - r.x0, height: r.y1 - r.y0, fill: css('--pcb'), stroke: 'none' }, bg);
+  for (const l of p.outline) {
+    const d = l.map((q, i) => { const m = S.toMachine(p, state.place, q.u, q.v); return (i ? 'L' : 'M') + m.x.toFixed(2) + ',' + sy(m.y).toFixed(2); }).join('');
+    el('path', { d, fill: 'none', stroke: css('--pcb-edge'), 'stroke-width': 0.6 }, bg);
+  }
+  // origin marker (bbox lower-left) so rotation is visible
+  const o = S.toMachine(p, state.place, 0, 0);
+  el('circle', { cx: o.x, cy: sy(o.y), r: 1.4, fill: css('--pcb-edge') }, bg);
+  const nm = el('text', { x: (r.x0 + r.x1) / 2, y: sy((r.y0 + r.y1) / 2), 'font-size': 5, 'text-anchor': 'middle', fill: '#fff', 'pointer-events': 'none' }, bg);
+  nm.textContent = `${p.name} ${state.place.rot}°${state.place.flip ? " · bottom up" : ""}`;
+  for (const h of p.mode === 'corners' ? [] : p.holes) {
+    const m = S.toMachine(p, state.place, h.u, h.v);
+    el('circle', { cx: m.x, cy: sy(m.y), r: h.d / 2, fill: h.use ? '#fff' : 'none', stroke: '#fff', 'stroke-width': 0.4 }, bg);
+    if (h.use) { const t = el('text', { x: m.x, y: sy(m.y) + h.d / 2 + 4, 'font-size': 3.6, 'text-anchor': 'middle', fill: '#fff', 'pointer-events': 'none' }, bg); t.textContent = h.ref; }
+  }
+  if (RES) RES.stands.forEach((st) => {
+    const t = el('text', { x: st.pin.x, y: sy(st.pin.y) + 2.2, 'font-size': 6, 'text-anchor': 'middle', fill: css('--stand-edge'), 'font-weight': 800, stroke: css('--plate'), 'stroke-width': 0.4, 'paint-order': 'stroke', 'pointer-events': 'none' }, g);
+    t.textContent = st.num;
+  });
+}
+
+// ------------------------------------------------------------ evaluate + readouts
+function setStatus(msg, kind) { const s = $('status'); s.textContent = msg; s.style.color = kind === 'bad' ? css('--bad') : kind === 'ok' ? css('--ok') : css('--muted'); }
+
+function update() {
+  if (!M) return;
+  $('pX').value = state.place.cx.toFixed(2);
+  $('pY').value = state.place.cy.toFixed(2);
+  RES = state.pcb ? S.evaluate(M, KO, state.pcb, state.place, ES()) : null;
+  refreshTrays();
+  drawDyn();
+  const ps = $('placeStatus'), sl = $('standList');
+  if (!RES) { ps.innerHTML = ''; sl.textContent = ''; setStatus('Load a board', ''); }
+  else if (RES.ok) {
+    ps.innerHTML = `<span class="okc">✓ ${RES.stands.length} stands fit</span> <span class="muted">(cost ${RES.cost.toFixed(1)})</span>`;
+    const e = ES();
+    ps.innerHTML += `<div class="muted">Pin ${e.pinLen.toFixed(2)} mm · board top at ${(e.height + e.pcbThick).toFixed(2)} mm above the plate${e.stepH > 0 ? ` · ${e.stepH.toFixed(1)} mm under the board` : ''}</div>` +
+      e.notes.map((n) => `<div style="color:var(--warn)">• ${n}</div>`).join('');
+    setStatus(`✓ ${RES.stands.length} stands`, 'ok');
+  } else {
+    ps.innerHTML = '<div class="err">' + RES.problems.map((x) => '• ' + x).join('\n') + '</div>';
+    setStatus('✗ ' + (RES.problems[0] || 'does not fit'), 'bad');
+  }
+  if (RES) {
+    sl.textContent = RES.stands.map((st) => {
+      const arm = Math.min(...st.bolts.map((b) => Math.hypot(b.x - st.anchor.x, b.y - st.anchor.y)));
+      const what = st.kind === 'corner' ? `corner ${st.ref}` : `${st.ref} ⌀${st.d.toFixed(2)}`;
+      return `${st.num}  ${what.padEnd(11)} → ${st.bolts.map((b) => b.name).join(' + ').padEnd(10)} arm ${arm.toFixed(1)} mm${st.under ? '  (bolt under PCB)' : ''}`;
+    }).join('\n') || '(no stands)';
+  }
+  // per-stand buttons
+  const per = $('perStand');
+  per.innerHTML = '';
+  if (RES) RES.stands.forEach((st, i) => {
+    const b = document.createElement('button');
+    b.textContent = `${st.num}.stl`;
+    b.onclick = () => exportStl([st], `${st.num}_${st.ref}`);
+    per.appendChild(b);
+  });
+  openpnpOut();
+  const lg = $('legend');
+  lg.innerHTML = `<b>${state.cfg.plates.map((pl) => `${pl.name}: ${pl.lower ? 'a–g' : 'A–G'}${pl.prefix ? ' (prefix ' + pl.prefix + ')' : ''}, A at ${pl.aAt}`).join(' · ')}</b><br>` +
+    `Grid ${M.nRows} rows × ${M.nCols} letters, ${M.P.pitch} mm pitch. Blue = stands, green = board, red = keep-out. The dot on the board marks its lower-left corner.`;
+  saveLocal();
+}
+
+function openpnpOut() {
+  const o = state.openpnp, out = $('opOut');
+  if (!state.pcb || !RES) { out.textContent = ''; return; }
+  const origin = state.pcb.origins && state.pcb.origins[o.origin];
+  if (!origin) { out.textContent = 'This board has no ' + (o.origin === 'aux' ? 'drill/place origin set' : 'page origin (not imported from KiCad)'); return; }
+  const r = S.boardOrigin(M, state.pcb, state.place, origin, o.hole ? { hole: o.hole, x: +o.x || 0, y: +o.y || 0, flipX: o.flipX, flipY: o.flipY } : null);
+  let s = `Origin on the plates (from the row-1/front corner): X ${r.plateX.toFixed(2)}  Y ${r.plateY.toFixed(2)}\nRotation ${state.place.rot}° (${state.place.flip ? 'BOTTOM side up' : 'top side up'})`;
+  if (r.error) s += '\n' + r.error;
+  else if (r.x !== undefined) s += `\nOpenPnP board location: X ${r.x.toFixed(2)}  Y ${r.y.toFixed(2)}  Rot ${state.place.rot}`;
+  else s += '\nEnter a reference hole and its jogged machine X/Y to get the OpenPnP location.';
+  out.textContent = s;
+}
+['originSel', 'refHole', 'refX', 'refY', 'flipX', 'flipY'].forEach((id) => $(id).addEventListener('input', () => {
+  const o = state.openpnp;
+  o.origin = $('originSel').value; o.hole = $('refHole').value.trim(); o.x = $('refX').value; o.y = $('refY').value;
+  o.flipX = $('flipX').checked; o.flipY = $('flipY').checked;
+  openpnpOut(); saveLocal();
+}));
+
+// ------------------------------------------------------------ placement controls
+function rotate() { state.place.rot = (state.place.rot + 90) % 360; update(); }
+$('rotBtn').onclick = rotate;
+window.addEventListener('keydown', (e) => { if ((e.key === 'r' || e.key === 'R') && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) rotate(); });
+$('pX').addEventListener('change', (e) => { state.place.cx = +e.target.value; update(); });
+$('pY').addEventListener('change', (e) => { state.place.cy = +e.target.value; update(); });
+$('snap').addEventListener('input', (e) => { state.snap = +e.target.value || 0; saveLocal(); });
+$('prefer').addEventListener('change', (e) => { state.prefer = e.target.value; saveLocal(); });
+$('sideUp').addEventListener('change', (e) => { state.place.flip = e.target.value === 'bottom'; update(); });
+function rotChecks() {
+  const box = $('rotAllowed');
+  box.innerHTML = '<span class="muted">Rotations allowed:</span>';
+  for (const r of [0, 90, 180, 270]) {
+    const l = document.createElement('label'); l.style.margin = '0';
+    l.innerHTML = `<input type="checkbox" ${state.rotAllowed.includes(r) ? 'checked' : ''}> ${r}°`;
+    l.querySelector('input').onchange = (e) => {
+      state.rotAllowed = e.target.checked ? [...new Set([...state.rotAllowed, r])] : state.rotAllowed.filter((x) => x !== r);
+      saveLocal();
+    };
+    box.appendChild(l);
+  }
+}
+function runAuto(local) {
+  if (!state.pcb) return setStatus('Load a board first', 'bad');
+  setStatus('Searching…', '');
+  setTimeout(() => {
+    const t0 = performance.now();
+    const r = S.autoPlace(M, KO, state.pcb, ES(), {
+      rotations: state.rotAllowed, prefer: local ? 'here' : state.prefer,
+      from: { x: state.place.cx, y: state.place.cy }, radius: local ? 40 : 0, step: local ? 0.5 : 1, flip: !!state.place.flip,
+    });
+    if (r.best) { state.place = { ...r.best.place }; update(); setStatus(`✓ placed (${r.tried} positions, ${Math.round(performance.now() - t0)} ms)`, 'ok'); }
+    else setStatus('✗ ' + r.reason, 'bad');
+  }, 20);
+}
+$('autoBtn').onclick = () => runAuto(false);
+$('refineBtn').onclick = () => runAuto(true);
+
+// ------------------------------------------------------------ pointer: pan / zoom / drag board / block holes
+function toUser(e) { const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; const q = pt.matrixTransform(svg.getScreenCTM().inverse()); return { x: q.x, y: q.y }; }
+let drag = null;
+svg.addEventListener('pointerdown', (e) => {
+  e.preventDefault(); // no text selection while dragging
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  const u = toUser(e);
+  const onTray = e.target.closest && e.target.closest('[data-tray]');
+  const onPcb = !onTray && e.target.closest && e.target.closest('#pcbGroup');
+  const tnum = onTray ? +onTray.dataset.tray : 0;
+  drag = { mode: onTray ? 'tray' : onPcb ? 'pcb' : 'pan', tnum, tpos0: tnum ? { ...(state.tray.pos[tnum] || {}) } : null, start: u, sx: e.clientX, sy: e.clientY, place0: { ...state.place }, vb0: { ...vb }, moved: false, target: e.target };
+  svg.setPointerCapture(e.pointerId);
+  svg.classList.add('dragging');
+});
+svg.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 3) drag.moved = true;
+  if (!drag.moved) return;
+  if (drag.mode === 'tray') {
+    const u = toUser(e), p0 = drag.tpos0;
+    if (p0.j === undefined) return;
+    const j = p0.j + Math.round((u.x - drag.start.x) / M.P.pitch), y0 = p0.y0 + Math.round(-(u.y - drag.start.y));
+    const cur = state.tray.pos[drag.tnum];
+    if (!cur || cur.j !== j || cur.y0 !== y0) { state.tray.pos[drag.tnum] = { j, y0 }; update(); }
+  } else if (drag.mode === 'pcb') {
+    const u = toUser(e);
+    let cx = drag.place0.cx + (u.x - drag.start.x), cy = drag.place0.cy - (u.y - drag.start.y);
+    if (state.snap > 0) { cx = Math.round(cx / state.snap) * state.snap; cy = Math.round(cy / state.snap) * state.snap; }
+    state.place.cx = cx; state.place.cy = cy;
+    update();
+  } else {
+    const r = svg.getBoundingClientRect(), k = vb.w / r.width;
+    vb.x = drag.vb0.x - (e.clientX - drag.sx) * k; vb.y = drag.vb0.y - (e.clientY - drag.sy) * k;
+    applyVb();
+  }
+});
+svg.addEventListener('pointerup', () => {
+  if (drag && !drag.moved && drag.target && drag.target.dataset && drag.target.dataset.hole) {
+    const n = drag.target.dataset.hole;
+    const i = state.clickBlocked.indexOf(n);
+    if (i >= 0) state.clickBlocked.splice(i, 1); else state.clickBlocked.push(n);
+    reparseKeepouts(); drawStatic(); update();
+  }
+  drag = null; svg.classList.remove('dragging');
+});
+svg.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const u = toUser(e), f = Math.exp(e.deltaY * 0.0015);
+  vb.x = u.x - (u.x - vb.x) * f; vb.y = u.y - (u.y - vb.y) * f; vb.w *= f; vb.h *= f;
+  applyVb();
+}, { passive: false });
+window.addEventListener('resize', fit);
+$('fitBtn').onclick = fit;
+$('themeBtn').onclick = () => {
+  const r = document.documentElement, cur = r.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  r.dataset.theme = cur === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem(LS_KEY + '.theme', r.dataset.theme); } catch (e) { /* ignore */ }
+  drawStatic(); update();
+};
+
+// ------------------------------------------------------------ export
+function download(name, data, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([data], { type }));
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+const baseName = () => (state.pcb ? state.pcb.name : 'board').replace(/[^\w.-]+/g, '_');
+function exportStl(stands, suffix) {
+  if (!window.jscadModeling) return setStatus('JSCAD did not load (vendor/jscad-modeling.min.js)', 'bad');
+  setStatus('Building solids…', '');
+  setTimeout(() => {
+    try {
+      const geoms = S.printLayout(stands, ES(), window.jscadModeling);
+      download(`${baseName()}_${suffix}.stl`, S.stlBinary(geoms, window.jscadModeling), 'model/stl');
+      setStatus(`✓ ${stands.length} stand(s) exported`, 'ok');
+    } catch (err) { setStatus('STL failed: ' + err.message, 'bad'); }
+  }, 20);
+}
+function exportOk() {
+  if (!RES || !RES.stands.length) { setStatus('Nothing to export', 'bad'); return false; }
+  return RES.ok || confirm('The placement has problems:\n' + RES.problems.join('\n') + '\n\nExport anyway?');
+}
+$('stlAllBtn').onclick = () => { if (exportOk()) exportStl(RES.stands, 'stands'); };
+// one STL per stand in a folder inside a .zip (each file is a single closed solid, so the slicer loads them as separate objects)
+$('stlBtn').onclick = () => {
+  if (!exportOk()) return;
+  if (!window.jscadModeling) return setStatus('JSCAD did not load (vendor/jscad-modeling.min.js)', 'bad');
+  setStatus('Building solids…', '');
+  setTimeout(() => {
+    try {
+      const dir = `${baseName()}_stands/`, sp = ES();
+      const files = RES.stands.map((st) => ({
+        name: `${dir}${st.num}_${String(st.ref).replace(/[^\w.-]+/g, '_')}.stl`,
+        data: new Uint8Array(S.stlBinary(S.printLayout([st], sp, window.jscadModeling), window.jscadModeling)),
+      }));
+      download(`${baseName()}_stands.zip`, S.zipStore(files), 'application/zip');
+      setStatus(`✓ ${files.length} STL files in ${baseName()}_stands.zip`, 'ok');
+    } catch (err) { setStatus('STL failed: ' + err.message, 'bad'); }
+  }, 20);
+};
+$('scadBtn').onclick = () => {
+  if (!RES || !RES.stands.length) return setStatus('Nothing to export', 'bad');
+  const meta = `${baseName()} at X ${state.place.cx.toFixed(2)} Y ${state.place.cy.toFixed(2)} rot ${state.place.rot}`;
+  download(`${baseName()}_stands.scad`, S.scadSource(RES.stands, ES(), meta), 'text/plain');
+};
+$('printBtn').onclick = () => {
+  if (!RES) return;
+  const sh = $('sheet'), sp = ES();
+  const rows = RES.stands.map((st) => `<tr><td><b>${st.num}</b></td><td>${st.kind === 'corner' ? 'corner ' + st.ref : st.ref}</td><td>${st.d ? st.d.toFixed(2) : '–'}</td><td><b>${st.bolts.map((b) => b.name).join(' + ')}</b></td></tr>`).join('');
+  sh.innerHTML = `<h2>${state.pcb.name}: LumenPnP stands</h2>
+    <p>Board centre X ${state.place.cx.toFixed(2)} Y ${state.place.cy.toFixed(2)} mm, rotation ${state.place.rot}°, <b>${state.place.flip ? 'bottom' : 'top'} side up</b>, board ${sp.pcbThick} mm thick.
+    Stand height ${sp.height} mm, ${sp.bolts} M3 bolt(s) per stand, ${sp.pocket === 'hex' ? 'nut on top' : sp.pocket === 'round' ? 'screw head on top' : 'plain holes'},
+    PCB ${sp.iface === 'pin' ? 'on printed pins' : 'on blind holes'}. ${state.cfg.plates.map((p) => `${p.name}: ${p.lower ? 'a–g' : 'A–G'}`).join(', ')}.</p>
+    <table><thead><tr><th>Stand</th><th>PCB hole</th><th>⌀</th><th>Grid holes</th></tr></thead><tbody>${rows}</tbody></table>
+    <pre>${$('opOut').textContent}</pre>${traySheet()}`;
+  window.print();
+};
+function traySheet() {
+  if (!TRAYS || !TRAYS.pk.trays.length) return '';
+  const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const where = new Map();
+  TRAYS.pk.trays.forEach((t, i) => t.lanes.forEach((l, k) => l.sections.forEach((s) => where.set(s.id, { t, k, s, p: TRAYS.pl[i] }))));
+  const rows = state.tray.bom.lines.filter((l) => where.has(l.id)).map((l) => {
+    const w = where.get(l.id);
+    return `<tr><td><b>${l.id}</b></td><td>${esc(l.value)}</td><td>${esc(fpShort(l.footprint))}</td><td>${w.s.count}</td><td>${l.tapeW} / ${l.pitch} ${l.carrier}</td><td>${w.s.tape.toFixed(0)} mm</td><td><b>T${w.t.num} L${w.k + 1}</b></td></tr>`;
+  }).join('');
+  const bolts = TRAYS.pk.trays.map((t, i) => `T${t.num}: ${TRAYS.pl[i] && TRAYS.pl[i].ok ? TRAYS.pl[i].bolts.map((b) => b.name).join(' + ') : 'not placed'}`).join(' · ');
+  const hand = state.tray.bom.lines.filter((l) => !l.use).map((l) => `${l.id} ${esc(l.value)} (${l.refs.join(' ')})`).join(', ');
+  return `<h3>Cut-tape trays (${state.tray.tp.boards} board(s) per run)</h3><p>Bolts: ${bolts}. Tape sprocket holes toward the front (low Y) of each lane; first part at the end with the engraved number.</p>
+    <table><thead><tr><th>#</th><th>Value</th><th>Footprint</th><th>Parts</th><th>Tape</th><th>Cut length</th><th>Tray / lane</th></tr></thead><tbody>${rows}</tbody></table>` +
+    (hand ? `<p>Not in a tray: ${hand}</p>` : '');
+}
+$('saveBtn').onclick = () => download(`${baseName()}_stands.json`, JSON.stringify(state, null, 1), 'application/json');
+$('loadBtn').onclick = () => $('loadFile').click();
+$('loadFile').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const s = JSON.parse(await f.text());
+    Object.assign(state, s, { sp: { ...S.DEFAULT_STAND, ...s.sp }, tray: mergeTray(s.tray) });
+    initForms(); rebuildMachine(); holeTable(); lineTable(); repackTrays(false); fit();
+  } catch (err) { setStatus('Load failed: ' + err.message, 'bad'); }
+});
+
+// ------------------------------------------------------------ cut-tape trays
+const TP_KEYS = ['boards', 'spares', 'leader', 'maxTrayW', 'laneLen', 'series', 'chClr', 'rib', 'sideWall', 'base', 'recessPaper', 'recessEmb', 'groove',
+  'labelBlock', 'labelH', 'labelDepth', 'nutH', 'minSection', 'endClr', 'gap'];
+function trayFormFromState() { TP_KEYS.forEach((k) => { $('tp_' + k).value = k === 'series' ? (state.tray.tp.series ? '1' : '0') : state.tray.tp[k]; }); }
+let trayTimer = 0;
+const repackSoon = () => { clearTimeout(trayTimer); trayTimer = setTimeout(() => { repackTrays(true); update(); }, 250); };
+TP_KEYS.forEach((k) => $('tp_' + k).addEventListener('input', (e) => {
+  const v = k === 'series' ? e.target.value === '1' : +e.target.value;
+  if (typeof v === 'number' && (!isFinite(v) || e.target.value === '')) return;
+  state.tray.tp[k] = v;
+  repackSoon();
+}));
+const fpShort = (fp) => fp.replace(/_\d+Metric$/, '').replace(/^(Package_|Oscillator_SMD_)/, '').slice(0, 22);
+function lineTable() {
+  const tb = $('lineTable').querySelector('tbody');
+  tb.innerHTML = '';
+  const b = state.tray.bom;
+  const subsOf = (o) => o.report.filter((x) => /substitution/.test(x)).map((x) => x.replace(/ ordered \(/, ' (')).join('; ') || 'none';
+  $('bomInfo').textContent = b ? `${b.name}: ${b.lines.length} lines (one per value + footprint), ${b.lines.filter((l) => l.use).length} in trays` + (b.skipped.length ? `; skipped ${b.skipped.length} (DNP / board-only)` : '') +
+    (b.order ? `. DigiKey order, qty = ordered.${b.order.unmatched.length ? ' Not matched: ' + b.order.unmatched.join('; ') + '.' : ''}${b.order.missing.length ? ' Not ordered: ' + b.order.missing.join(', ') + '.' : ''} Substitutions: ${subsOf(b.order)}` : '') :
+    'No BOM yet: KiCad BOM CSV (Designator/Refs, Value, Footprint, Qty per board) or a DigiKey order CSV.';
+  if (!b) return;
+  const pk = TRAYS && TRAYS.pk;
+  for (const l of b.lines) {
+    const s = pk && pk.sections.find((x) => x.id === l.id);
+    const tr = document.createElement('tr');
+    tr.title = `${l.refs.join(' ')}\n${l.footprint}${l.mpn ? '\n' + l.mpn : ''}${l.tapeNote ? '\nTape: ' + l.tapeNote : ''}`;
+    tr.innerHTML = `<td><input type="checkbox" data-k="use" ${l.use ? 'checked' : ''}></td><td><b>${l.id}</b></td>
+      <td>${l.value.split(' / ')[0].slice(0, 16)}<div class="muted" style="font-size:11px">${fpShort(l.footprint)}${l.tapeNote ? ' <span style="color:var(--warn)">⚠</span>' : ''}</div></td>
+      <td>${l.qty}</td><td>${s ? s.count : '–'}</td>
+      <td><select data-k="tapeW">${[8, 12, 16, 24, 32, 44].map((w) => `<option ${w === l.tapeW ? 'selected' : ''}>${w}</option>`).join('')}</select></td>
+      <td><select data-k="pitch">${[2, 4, 8, 12, 16, 20, 24].map((w) => `<option ${w === l.pitch ? 'selected' : ''}>${w}</option>`).join('')}</select></td>
+      <td><select data-k="carrier"><option value="paper" ${l.carrier === 'paper' ? 'selected' : ''}>paper</option><option value="embossed" ${l.carrier === 'embossed' ? 'selected' : ''}>emb.</option></select></td>`;
+    tr.querySelectorAll('[data-k]').forEach((el) => el.addEventListener('change', () => {
+      const k = el.dataset.k;
+      l[k] = k === 'use' ? el.checked : k === 'carrier' ? el.value : +el.value;
+      repackSoon();
+    }));
+    tb.appendChild(tr);
+  }
+}
+$('openBom').onclick = () => $('bomFile').click();
+$('bomFile').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  try {
+    const text = await f.text(), name = f.name.replace(/\.csv$/i, '');
+    if (TR.isDigiKeyOrder(text)) {
+      // order: the board's own footprints give the lines, the order gives the quantities (trays hold everything ordered)
+      if (!state.pcb || !state.pcb.parts || !state.pcb.parts.length) return setStatus('A DigiKey order needs the .kicad_pcb open first (footprints and refs come from the board)', 'bad');
+      const r = TR.applyOrder(TR.linesFromParts(state.pcb.parts).lines, text);
+      state.tray.bom = { name, lines: r.lines, skipped: [], order: { report: r.report, unmatched: r.unmatched, missing: r.missing } };
+      Object.assign(state.tray.tp, { boards: 1, spares: 0 });
+      trayFormFromState();
+      const subs = r.report.filter((x) => /substitution/.test(x)).length;
+      setStatus(`DigiKey order: ${r.report.length} line(s) matched${subs ? ', ' + subs + ' substitution(s)' : ''}${r.unmatched.length ? ', ' + r.unmatched.length + ' NOT matched' : ''}. Boards per run set to 1, spares 0.`, r.unmatched.length ? 'bad' : 'ok');
+    } else {
+      const r = TR.parseBom(text);
+      state.tray.bom = { name, lines: r.lines, skipped: r.skipped };
+    }
+    repackTrays(true); lineTable(); update();
+  } catch (err) { setStatus('BOM import failed: ' + err.message, 'bad'); }
+});
+function trayObstacles() {
+  const rects = [], polys = [];
+  if (state.pcb) rects.push({ ...(RES ? RES.rect : S.pcbRect(state.pcb, state.place)), label: 'the board' });
+  if (RES) RES.stands.forEach((st) => polys.push({ pts: S.standOutline(st), label: 'stand ' + st.num }));
+  return { rects, polys };
+}
+const trayTarget = () => state.pcb ? { x: state.place.cx, y: state.place.cy } : { x: (M.extent.x0 + M.extent.x1) / 2, y: (M.extent.y0 + M.extent.y1) / 2 };
+/**
+ * fresh: plan from scratch (smallest layout that fits, see PnpTray.plan) and forget moved trays.
+ * Otherwise rebuild the layout chosen last time (state.tray.layout) and keep the stored tray positions.
+ */
+function repackTrays(fresh) {
+  const b = state.tray.bom, tp = state.tray.tp;
+  if (!b || !M) { TRAYS = null; return; }
+  if (!fresh) {
+    const pk = TR.pack(b.lines, { ...tp, ...(state.tray.layout || {}) }, ES(), M);
+    const known = pk.trays.length && pk.trays.every((t) => state.tray.pos[t.num]) && Object.keys(state.tray.pos).length === pk.trays.length;
+    if (known) { TRAYS = { pk, pl: [] }; placeTraysNow(); return; }
+  }
+  const r = TR.plan(b.lines, tp, ES(), M, KO, trayObstacles(), trayTarget());
+  state.tray.layout = { maxTrayW: r.pk.maxTrayW || tp.maxTrayW, laneLen: tp.series && !tp.laneLen && r.pk.trays.length ? r.pk.trays[0].Lc : tp.laneLen };
+  state.tray.pos = {};
+  r.pk.trays.forEach((t, i) => { if (r.pl[i] && r.pl[i].ok) state.tray.pos[t.num] = { j: r.pl[i].j, y0: r.pl[i].y0 }; });
+  TRAYS = { pk: r.pk, pl: r.pl, tried: r.tried };
+}
+/** Place: trays with a stored position are checked there, the others are searched for (and then stored) */
+function placeTraysNow() {
+  if (!TRAYS) return;
+  const pl = TR.placeTrays(M, KO, TRAYS.pk.trays, trayObstacles(), state.tray.tp, ES(), trayTarget(), state.tray.pos);
+  TRAYS.pk.trays.forEach((t, i) => { if (!state.tray.pos[t.num] && pl[i] && pl[i].ok) state.tray.pos[t.num] = { j: pl[i].j, y0: pl[i].y0 }; });
+  TRAYS.pl = pl;
+}
+function refreshTrays() {
+  if (!TRAYS) { $('trayStatus').innerHTML = ''; $('trayList').textContent = ''; return; }
+  placeTraysNow();
+  const { pk, pl } = TRAYS;
+  const bad = pl.filter((p) => !p || !p.ok).length;
+  $('trayStatus').innerHTML = (pk.problems.length ? `<div class="err">${pk.problems.map((x) => '• ' + x).join('\n')}</div>` : '') +
+    (pk.trays.length ? (bad ? `<div class="err">✗ ${bad} of ${pk.trays.length} tray(s) don't fit where they are: drag them or press Pack + place</div>` : `<span class="okc">✓ ${pk.sections.length} sections in ${pk.trays.length} tray(s)</span>`) : '') +
+    (state.tray.layout && state.tray.layout.maxTrayW < state.tray.tp.maxTrayW ? `<div class="muted">Trays narrowed to ${state.tray.layout.maxTrayW} mm so they fit around the board.</div>` : '');
+  $('trayList').textContent = pk.trays.map((t, i) => {
+    const p = pl[i];
+    const head = `Tray ${t.num}: ${t.L.toFixed(1)} × ${t.W.toFixed(1)} mm, top ${t.T.toFixed(1)} (caps ${t.Tc.toFixed(2)}), lanes ${t.Lc.toFixed(0)} mm` +
+      (p && p.ok ? `\n  bolts ${p.bolts.map((b) => b.name).join(' ')}` : `\n  ✗ ${p ? p.why : 'not placed'}`);
+    const lanes = t.lanes.map((l, k) => `  L${k + 1} ${l.tapeW} mm: ` + l.sections.map((s) => `${s.id} (${s.count} pcs, ${s.tape.toFixed(0)} mm)`).join(' → ')).join('\n');
+    return head + '\n' + lanes;
+  }).join('\n\n');
+}
+function drawTrays(g) {
+  if (!TRAYS) return;
+  TRAYS.pk.trays.forEach((t, i) => {
+    const p = TRAYS.pl[i];
+    if (!p || !p.rect) return;
+    const r = p.rect, grp = el('g', { 'data-tray': t.num, style: 'cursor: move' }, g);
+    el('title', {}, grp).textContent = `Tray ${t.num}` + (p.ok ? '' : ': ' + p.why);
+    el('rect', { x: r.x0, y: sy(r.y1), width: r.x1 - r.x0, height: r.y1 - r.y0, fill: css('--tray'), stroke: p.ok ? css('--tray-edge') : css('--bad'), 'stroke-width': p.ok ? 0.5 : 1.2 }, grp);
+    for (const l of t.lanes) for (const s of l.sections) {
+      el('rect', { x: r.x0 + s.aTape, y: sy(r.y0 + l.c1), width: s.a1 - s.aTape, height: l.c1 - l.c0, fill: css('--tray-lane'), stroke: 'none' }, grp);
+      const tx = el('text', { x: r.x0 + (s.a0 + s.aTape) / 2, y: sy(r.y0 + (l.c0 + l.c1) / 2) + 1.3, 'font-size': Math.min(4, l.chW * 0.45), 'text-anchor': 'middle', 'font-weight': 700, fill: css('--tray-edge'), 'pointer-events': 'none' }, grp);
+      tx.textContent = s.id;
+    }
+    const tt = el('text', { x: r.x0 + t.capW / 2, y: sy(r.y1) - 1.5, 'font-size': 4.5, 'text-anchor': 'start', fill: css('--tray-edge'), 'font-weight': 700, 'pointer-events': 'none' }, grp);
+    tt.textContent = 'T' + t.num;
+    if (p.bolts) for (const b of p.bolts) {
+      el('circle', { cx: b.x, cy: sy(b.y), r: TR.capOf(ES(), state.tray.tp).pocketR, fill: 'none', stroke: css('--tray-edge'), 'stroke-width': 0.4, 'pointer-events': 'none' }, grp);
+      const bt = el('text', { x: b.x, y: sy(b.y) + 1.3, 'font-size': 3.2, 'text-anchor': 'middle', fill: css('--tray-edge'), 'pointer-events': 'none' }, grp);
+      bt.textContent = b.name;
+    }
+  });
+}
+$('trayPackBtn').onclick = () => {
+  if (!state.tray.bom) return setStatus('Open a BOM first', 'bad');
+  const t0 = performance.now();
+  repackTrays(true); lineTable(); update();
+  setStatus(`✓ trays packed and placed (${Math.round(performance.now() - t0)} ms)`, 'ok');
+};
+const bomBase = () => (state.tray.bom ? state.tray.bom.name : baseName()).replace(/[^\w.-]+/g, '_');
+$('trayCsvBtn').onclick = () => {
+  if (!TRAYS) return setStatus('Open a BOM first', 'bad');
+  download(`${bomBase()}_tray_sections.csv`, TR.sectionsCsv(state.tray.bom.lines, TRAYS.pk, TRAYS.pl), 'text/csv');
+};
+$('trayZipBtn').onclick = () => {
+  if (!TRAYS || !TRAYS.pk.trays.length) return setStatus('Nothing to export', 'bad');
+  const bad = TRAYS.pk.trays.filter((t, i) => !TRAYS.pl[i] || !TRAYS.pl[i].ok);
+  if (bad.length && !confirm(`Tray(s) ${bad.map((t) => t.num).join(', ')} don't fit where they are, so their bolt holes can't be placed and they are left out.\n\nExport the rest?`)) return;
+  if (!window.jscadModeling) return setStatus('JSCAD did not load (vendor/jscad-modeling.min.js)', 'bad');
+  setStatus('Building trays…', '');
+  setTimeout(() => {
+    try {
+      const dir = `${bomBase()}_trays/`, sp = ES(), j = window.jscadModeling;
+      const enc = (str) => new TextEncoder().encode(str);
+      const files = [];
+      TRAYS.pk.trays.forEach((t, i) => {
+        const p = TRAYS.pl[i];
+        if (!p || !p.ok) return;
+        files.push({ name: `${dir}tray${t.num}.stl`, data: new Uint8Array(S.stlBinary([TR.traySolid(t, p, state.tray.tp, sp, j)], j)) });
+      });
+      files.push({ name: `${dir}sections.csv`, data: enc(TR.sectionsCsv(state.tray.bom.lines, TRAYS.pk, TRAYS.pl)) });
+      download(`${bomBase()}_trays.zip`, S.zipStore(files), 'application/zip');
+      setStatus(`✓ ${files.length - 1} tray STL(s) + sections.csv in ${bomBase()}_trays.zip`, 'ok');
+    } catch (err) { setStatus('Tray export failed: ' + err.message, 'bad'); }
+  }, 20);
+};
+
+// ------------------------------------------------------------ OpenPnP project
+['op_notInTray', 'op_plateZ'].forEach((id) => $(id).addEventListener('input', () => {
+  state.op = { notInTray: $('op_notInTray').value, plateZ: +$('op_plateZ').value || 0 }; saveLocal();
+}));
+function openpnpProject() {
+  const o = state.openpnp;
+  return OP.project({
+    m: M, pcb: state.pcb, place: state.place, sp: ES(), lines: state.tray.bom ? state.tray.bom.lines : null,
+    trays: TRAYS ? { pk: TRAYS.pk, pl: TRAYS.pl } : null, tp: state.tray.tp,
+    ref: o.hole ? { hole: o.hole, x: +o.x || 0, y: +o.y || 0, flipX: o.flipX, flipY: o.flipY } : null,
+    plateZ: state.op.plateZ, notInTray: state.op.notInTray,
+  });
+}
+$('opBtn').onclick = () => {
+  if (!state.pcb || !state.pcb.parts) return setStatus('Open the .kicad_pcb first (placements come from it)', 'bad');
+  try {
+    const prj = openpnpProject();
+    const enc = new TextEncoder(), dir = prj.name + '_openpnp/';
+    download(`${prj.name}_openpnp.zip`, S.zipStore(prj.files.map((f) => ({ name: dir + f.name, data: enc.encode(f.text) }))), 'application/zip');
+    $('opNotes').innerHTML = prj.notes.map((n) => '• ' + n.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('<br>');
+    setStatus(`✓ OpenPnP project: ${prj.counts.place} to place, ${prj.counts.ignore} ignored, ${prj.counts.fid} fiducials, ${prj.feeders.length} strip feeders`, 'ok');
+  } catch (err) { setStatus('OpenPnP export failed: ' + err.message, 'bad'); }
+};
+
+// ------------------------------------------------------------ machine form events
+$('profile').addEventListener('change', (e) => {
+  const p = S.PROFILES[e.target.value];
+  state.profile = e.target.value;
+  state.cfg = JSON.parse(JSON.stringify(p));
+  state.keepouts = p.keepouts;
+  machineFormFromState(); rebuildMachine(); fit();
+});
+$('nPlates').addEventListener('change', (e) => { setPlateCount(+e.target.value); plateCfgForm(); rebuildMachine(); fit(); });
+$('row1').addEventListener('change', (e) => { state.cfg.row1 = e.target.value; rebuildMachine(); });
+PL_KEYS.forEach((k) => $('pl_' + k).addEventListener('change', (e) => { const v = +e.target.value; if (isFinite(v) && v >= 0) { state.cfg.plate[k] = v; rebuildMachine(); fit(); } }));
+let koTimer = 0;
+$('keepouts').addEventListener('input', (e) => {
+  state.keepouts = e.target.value;
+  clearTimeout(koTimer);
+  koTimer = setTimeout(() => { reparseKeepouts(); drawStatic(); update(); }, 250);
+});
+
+function initForms() {
+  machineFormFromState();
+  standFormFromState();
+  rotChecks();
+  $('prefer').value = state.prefer;
+  $('sideUp').value = state.place.flip ? 'bottom' : 'top';
+  $('snap').value = state.snap;
+  const o = state.openpnp;
+  $('originSel').value = o.origin; $('refHole').value = o.hole; $('refX').value = o.x; $('refY').value = o.y;
+  $('flipX').checked = o.flipX; $('flipY').checked = o.flipY;
+  trayFormFromState();
+  $('op_notInTray').value = state.op.notInTray; $('op_plateZ').value = state.op.plateZ;
+}
+
+// ------------------------------------------------------------ boot
+loadLocal();
+try { const t = localStorage.getItem(LS_KEY + '.theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) { /* ignore */ }
+initForms();
+M = S.buildMachine(state.cfg);
+reparseKeepouts();
+drawStatic();
+holeTable();
+fit();
+update();
+repackTrays(false); // after update(): placement needs the stands
+lineTable();
+update();
+if (location.hash === '#demo') { $('manRect').click(); state.prefer = 'camera'; runAuto(false); }
+if (location.hash === '#demo-corners') { $('manRect').click(); state.pcb.mode = 'corners'; holeTable(); state.prefer = 'camera'; runAuto(false); }
+</script>
+</body>
+</html>
