@@ -220,7 +220,8 @@
       `                      ${machineFrame ? 'Machine coordinates via the reference hole.' : 'PLATE FRAME (no reference hole was set), not machine coordinates.'}`,
       `                      Z = plate top (${plateZ}) + stand height + board thickness. Add a second board in the Job tab for a 2-board run.`,
       `  parts.xml           parts to merge (id = footprint-value, one per BOM line, same as the tray sections).`,
-      `  packages.xml        packages to merge (body size, nozzle tip from Opulo's set N045 N08 N14 N24 N40 N75).`,
+      `  packages.xml        packages to merge (body size, nozzle tip by name from Opulo's set N045 N08 N14 N24 N40 N75;`,
+      `                      the merge turns the names into this machine's nozzle tip ids).`,
       `  feeders.xml         ${feeders.length} ReferenceStripFeeder(s), ids PLAN-<line>, one per tray section.`,
       ``,
       `Merge (OpenPnP must be CLOSED: it rewrites its config when it exits)`,
@@ -275,9 +276,40 @@ def load_manifest():
     return set(MANIFEST.read_text(encoding="utf-8").splitlines()) if MANIFEST.exists() else set()
 
 
+def tip_ids():
+    # nozzle tip name -> id from this machine's machine.xml: packages list compatible tips by id (NT1, TIP16b1a...),
+    # which differ per machine, so the generated files carry the names (N045, N08, ...) and they're resolved here
+    m = cfg / "machine.xml"
+    if not m.exists():
+        return {}
+    out = {}
+    for tag in re.findall(r"<nozzle-tip\s[^>]*>", m.read_text(encoding="utf-8")):
+        i, n = re.search(r'(?<=\s)id="([^"]*)"', tag), re.search(r'(?<=\s)name="([^"]*)"', tag)
+        if i:
+            out[i.group(1)] = i.group(1)
+            if n:
+                out.setdefault(n.group(1), i.group(1))
+    return out
+
+
+def resolve_tips(item, tips, missing):
+    def one(m):
+        name = m.group(1)
+        if name in tips:
+            return "<string>%s</string>" % tips[name]
+        missing.add(name)
+        return ""  # unknown on this machine: left out (set it in the Packages tab)
+    return re.sub(r"<string>([^<]*)</string>", one, item)
+
+
 def merge_lib(fname, tag, root, mine):
     new = (here / fname).read_text(encoding="utf-8")
     items = re.findall(r"(<%s\s[^>]*?(?:/>|>[\s\S]*?</%s>))" % (tag, tag), new)
+    if tag == "package":
+        tips, missing = tip_ids(), set()
+        items = [resolve_tips(it, tips, missing) for it in items]
+        if missing:
+            print("  nozzle tip(s) not on this machine, left unticked: %s" % ", ".join(sorted(missing)))
     dst = cfg / fname
     text = dst.read_text(encoding="utf-8") if dst.exists() else "<%s>\n</%s>\n" % (root, root)
     if dst.exists():
