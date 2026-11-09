@@ -242,17 +242,20 @@ const O = require('./pnp_openpnp_core.js');
         assert(/z="16.000"/.test(r.files[Object.keys(asMap).find((n) => n.endsWith('.job.xml'))]), 'fit_fiducials: measured board Z in the job');
       }
     }
-    // Opulo LumenPnP strip feeders instead of our trays
+    // Opulo LumenPnP printed tray feeders instead of our trays: sections end to end in their channels
     for (const orient of [90, 180]) {
       const otp = { ...T.DEFAULT_TRAY, holder: 'opulo', opOrient: orient };
       const op = T.opuloPack(lines, otp);
       const used = lines.filter((l) => l.use && op.types[l.tapeW]);
-      const stripsOk = used.every((l) => {
-        const st = op.strips.filter((s) => s.id === l.id);
-        return st.reduce((a, s) => a + s.parts, 0) === op.counts[l.id] && st.every((s) => s.parts <= s.cap && s.cap === Math.floor(otp.opUsable / l.pitch) - otp.leader);
+      const partsOk = used.every((l) => {
+        const ss = op.sections.filter((s) => s.id === l.id);
+        // same length rule as the trays for a whole line; a split line's pieces each fit a channel
+        const lenOk = ss.length > 1 || Math.abs(ss[0].tape - Math.min(otp.opUsable, T.sectionOf(l, otp).tape)) < 1e-9;
+        return ss.reduce((a, s) => a + s.count, 0) === op.counts[l.id] && lenOk;
       });
-      assert(stripsOk && op.feeders.every((f) => f.strips.length <= f.type.strips && f.strips.every((s) => s.tapeW === f.tapeW)),
-        `opulo ${orient}°: ${op.strips.length} strips (parts per line add up, none over capacity) in ${op.feeders.length} feeder(s) of one tape width each`);
+      const chOk = op.feeders.every((f) => f.channels.length <= f.type.strips && f.channels.every((ch) =>
+        ch.used <= f.usable + 1e-9 && ch.sections.every((s, i) => s.tapeW === f.tapeW && s.a1 <= f.usable + 1e-9 && (i === 0 ? s.a0 === 0 : s.a0 >= ch.sections[i - 1].a1 + otp.opGap - 1e-9))));
+      assert(partsOk && chOk, `opulo ${orient}°: ${op.sections.length} sections (parts add up, tray length rule) end to end with ${otp.opGap} mm gaps in ${op.feeders.reduce((a, f) => a + f.channels.length, 0)} channels / ${op.feeders.length} feeder(s), none over the channel length`);
       const opl = T.placeOpulo(m, ko, op.feeders, obst, otp, { x: ap.best.place.cx, y: ap.best.place.cy });
       const okp = opl.filter((p) => p.ok);
       let overlap = 0;
@@ -266,11 +269,35 @@ const O = require('./pnp_openpnp_core.js');
       assert(okp.length === op.feeders.length && !overlap && onePlate && boltsOk, `opulo ${orient}°: all ${op.feeders.length} feeders placed, on one plate each, no overlap, 2 grid holes ≥ 30 mm apart under each`);
       const oprj = O.project({ m, pcb: board, place: ap.best.place, sp: tsp, lines, trays: null, opulo: { op, pl: opl }, tp: otp, ref: null, plateZ: 0, notInTray: 'ignore' });
       const ids = oprj.feeders.map((f) => f.id);
-      assert(oprj.feeders.length === op.strips.length && new Set(ids).size === ids.length, `opulo ${orient}°: OpenPnP has one strip feeder per strip (${ids.length}, ids unique)`);
+      const fx = oprj.files.find((f) => f.name === 'feeders.xml').text;
+      // each tray feeder: first pick inside its feeder, part count = section count, step = pitch along the channel
+      const inside = op.feeders.every((f, i) => T.opuloCoords(f, opl[i], otp).every((c) => {
+        const r = opl[i].rect, step = Math.hypot(c.offset.x, c.offset.y), lastX = c.first.x + (c.n - 1) * c.offset.x, lastY = c.first.y + (c.n - 1) * c.offset.y;
+        return c.first.x > r.x0 && c.first.x < r.x1 && c.first.y > r.y0 && c.first.y < r.y1 && lastX > r.x0 && lastX < r.x1 && lastY > r.y0 && lastY < r.y1 && step === c.sec.line.pitch;
+      }));
+      assert(oprj.feeders.length === op.sections.length && new Set(ids).size === ids.length && (fx.match(/ReferenceTrayFeeder/g) || []).length === ids.length && inside,
+        `opulo ${orient}°: OpenPnP has one tray feeder per section (${ids.length}, ids unique), first and last pick inside the feeder`);
+      // fit_fiducials moves tray feeders with the board: pick location through the fit, offset turned by its angle
+      const F = require('./fit_fiducials.js');
+      const files = Object.fromEntries(oprj.files.map((f) => [f.name, f.text]));
+      const bName = Object.keys(files).find((n) => n.endsWith('.board.xml'));
+      const fidIds = [...files[bName].matchAll(/id="([^"]+)"[^>]*type="Fiducial"/g)].map((x) => x[1]);
+      if (fidIds.length >= 2) {
+        const a = (0.4 * Math.PI) / 180, mv = (p) => [Math.cos(a) * p[0] - Math.sin(a) * p[1] - 30, Math.sin(a) * p[0] + Math.cos(a) * p[1] + 70];
+        const at = (txt, id) => { const q = txt.match(new RegExp(`id="${id}"[^>]*>\\s*<location [^>]*x="([-\\d.]+)" y="([-\\d.]+)"`)); return [+q[1], +q[2]]; };
+        const taught = Object.fromEntries(fidIds.map((id) => [id, mv(at(files[bName], id))]));
+        const r = F.fitProject(files, taught, { z: 16 });
+        const B = oprj.loc, f0 = oprj.feeders[0];
+        const want = mv([f0.first.x - B.x, f0.first.y - B.y]), got = at(r.files['feeders.xml'], f0.id);
+        const off = r.files['feeders.xml'].match(new RegExp(`id="${f0.id}"[\\s\\S]*?<offsets [^>]*x="([-\\d.]+)" y="([-\\d.]+)"`));
+        const wOff = [Math.cos(a) * f0.offset.x - Math.sin(a) * f0.offset.y, Math.sin(a) * f0.offset.x + Math.cos(a) * f0.offset.y];
+        assert(Math.hypot(got[0] - (B.x + want[0]), got[1] - (B.y + want[1])) < 2e-3 && Math.hypot(+off[1] - wOff[0], +off[2] - wOff[1]) < 2e-3,
+          `opulo ${orient}°: fit_fiducials moves the tray feeders with the board (pick location and part offset)`);
+      }
     }
     {
-      const op = T.opuloPack(lines, { ...T.DEFAULT_TRAY, holder: 'opulo', opTypes: '8:3:40:1' });
-      assert(op.problems.some((x) => /you have 1/.test(x)) || op.feeders.filter((f) => f.tapeW === 8).length <= 1, 'opulo: a shortage against "have" is reported');
+      const op = T.opuloPack(lines, { ...T.DEFAULT_TRAY, holder: 'opulo', opHave: '8:1' });
+      assert(op.problems.some((x) => /you have 1/.test(x)) || (op.need[8] || 0) <= 1, 'opulo: a shortage against "feeders you have" is reported');
     }
     fs.mkdirSync(path.join(outDir, 'openpnp'), { recursive: true });
     for (const f of prj.files) fs.writeFileSync(path.join(outDir, 'openpnp', f.name), f.text);

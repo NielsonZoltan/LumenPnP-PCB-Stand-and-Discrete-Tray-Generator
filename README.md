@@ -50,18 +50,22 @@ Open `pnp_stand.html` in a browser (double-click it; it works offline). Open `pn
    Tape width, pitch and carrier (paper / embossed) come from a package table (EIA-481 typical) and can be changed per
    line; ⚠ marks a guess (connectors, switches, packages by body size). Sprocket holes go toward the front of each lane.
 
-   **Holder = Opulo LumenPnP strip feeders** (instead of printing our trays): each ticked line gets as many strips as
-   it needs (a strip holds floor(usable length / pitch) − empty pockets; usable length 110 mm of the 120 mm feeder is a
-   guess), and strips of one tape width fill feeders of that width in line order. *Feeder types* is one entry per tape
-   width, `W:strips:width across[:how many you have]`: default `8:3:40 12:3:56.2 16:2:48 24:1:36 32:1:44` (strips per
-   feeder from opulo.io; 8 / 12 mm widths from Opulo's FreeCAD files, 16 / 24 / 32 mm guessed). With a count you own,
-   e.g. `8:3:40:6`, a shortage is reported. Feeders are placed on the plates like trays (draggable), one plate each,
-   bolted through two grid holes under them, ≥ 30 mm apart (90°: front-to-back strips, A15 + G15 style; 180°: along the
-   rows). The list says which line goes on which feeder / strip and how many parts; *Setup CSV* and the print sheet
-   have the same. The OpenPnP export (section 7) then writes one strip feeder per strip (`PLAN-<line>`, or
-   `PLAN-<line>-<k>` for a line on k strips) at ballpark positions: Auto Setup each one. In OpenPnP's Auto Setup the
-   sprocket holes must be on the right of the feed direction (first part clicked → second): at 90° with the holes on the
-   left, click the part at the back first.
+   **Holder = Opulo LumenPnP printed tray feeders** (instead of printing our trays). Opulo sells them as "strip feeders"
+   but its own setup guide uses them as OpenPnP *tray* feeders: a pick location, a per-part offset and a count, no
+   sprocket-hole vision, so a cut strip can start anywhere in a channel. Each ticked line gets a section with the same
+   length rule as our trays ((parts + empty pockets) × pitch + slack, at least the shortest section); a line longer than
+   a channel is split. Sections of one tape width go end to end in the channels with *Gap between sections* (5 mm)
+   between them (first-fit decreasing), and channels fill feeders of that width. *Feeders you have* (`8:10 12:2`)
+   reports a shortage. Under *Feeder dimensions*: *Feeder types*, one per tape width `W:channels:width across[:channel
+   pitch]`, default `8:3:40:15 12:3:56.2:15 16:2:48:20 24:1:36 32:1:44` (channels from opulo.io; 8 / 12 mm width and the
+   15 mm channel pitch from Opulo's FreeCAD, which the LumenPnP host's own tray feeders confirm at 14.9 mm; 16 / 24 / 32
+   guessed), usable channel length (116 of 120 mm), pick Z above the plate (9, from the host's tray feeders). Feeders
+   are placed like trays (draggable), one plate each, two grid holes under them ≥ 30 mm apart (90°: channels front to
+   back, A15 + G15 style; 180°: along the rows). The list, *Setup CSV* and the print sheet say which line goes in which
+   feeder / channel, its cut length and where it starts ("@ mm" from the back end at 90°, the left end at 180°). The
+   OpenPnP export (section 7) writes a ReferenceTrayFeeder per section (`PLAN-<line>`, or `PLAN-<line>-<k>` for a
+   split line): first part at the back, next parts toward the front (offset −pitch in Y, like the host's own); position
+   the camera on the first part, capture, set Z and rotation.
 
 7. **OpenPnP project** (OpenPnP 2.4): a .zip with `<board>.board.xml` (placements from the .kicad_pcb, origin = board
    lower-left, fiducials kept), `<board>.job.xml` (board location from this placement), `parts.xml` / `packages.xml` (one
@@ -134,8 +138,8 @@ slots on the plates → OpenPnP starter config. Opulo's strip feeder models are 
 - Tray fit: channel clearance (tape + 0.3), recess depths and the embossed pocket relief (2.6 mm) are first guesses.
   Print one tray and adjust in *Tray dimensions*. Cut tape tends to curl; hold the strip ends down with Kapton if needed.
 - Tape widths / pitches marked ⚠ (FTR connector, PTS810 switch, body-size guesses) need the datasheet tape drawing.
-- Opulo strip feeders: usable strip length (110 mm), the 16 / 24 / 32 mm feeder widths and the tape surface height
-  (8 mm) are guesses; strip positions inside a feeder are spread evenly, not measured. Measure one feeder and set them.
+- Opulo tray feeders: usable channel length (116 mm), the 16 / 24 / 32 mm feeder widths and pitches, and the pick Z are
+  guesses; the pocket offset from the channel centre line is not modelled. Measure one feeder and set them.
 
 - Corner mode uses the board's bounding-box corners. A board with large corner radii or chamfers sits on the pads but
   doesn't touch the walls exactly at the corner.

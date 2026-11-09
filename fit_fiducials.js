@@ -71,12 +71,22 @@ function fitProject(files, taught, opts = {}) {
   const out = { [boardName]: board, [jobName]: job };
   if (files['feeders.xml']) {
     // feeder holes are in the same frame as the board location: M = B + map(P - B)
+    const c = Math.cos((fit.deg * Math.PI) / 180), s = Math.sin((fit.deg * Math.PI) / 180);
+    // tray feeders (Opulo printed trays): pick location through the fit, the per-part offset turned by the fit's angle
+    const tray = (block) => block
+      .replace(/<location units="Millimeters" x="([-\d.]+)" y="([-\d.]+)" z="([-\d.]+)" rotation="([-\d.]+)"/, (all, x, y, fz, r) => {
+        const m = fit.map([+x - B.x, +y - B.y]);
+        return `<location units="Millimeters" x="${(B.x + m[0]).toFixed(3)}" y="${(B.y + m[1]).toFixed(3)}" z="${(+fz + dz).toFixed(3)}" rotation="${normDeg(+r + fit.deg).toFixed(3)}"`;
+      })
+      .replace(/<offsets units="Millimeters" x="([-\d.]+)" y="([-\d.]+)"/, (all, x, y) => `<offsets units="Millimeters" x="${(c * x - s * y).toFixed(3)}" y="${(s * x + c * y).toFixed(3)}"`);
     out['feeders.xml'] = files['feeders.xml']
+      .replace(/<feeder class="org\.openpnp\.machine\.reference\.feeder\.ReferenceTrayFeeder"[\s\S]*?<\/feeder>/g, tray)
+      // strip feeders: holes are in the same frame as the board location: M = B + map(P - B)
       .replace(/<(reference-hole-location|last-hole-location) units="Millimeters" x="([-\d.]+)" y="([-\d.]+)" z="([-\d.]+)"/g, (all, tag, x, y, fz) => {
         const m = fit.map([+x - B.x, +y - B.y]);
         return `<${tag} units="Millimeters" x="${(B.x + m[0]).toFixed(3)}" y="${(B.y + m[1]).toFixed(3)}" z="${(+fz + dz).toFixed(3)}"`;
       })
-      .replace(/(<feeder [^>]*>\s*<location units="Millimeters" x="[-\d.]+" y="[-\d.]+" z=")([-\d.]+)/g, (all, a, fz) => a + (+fz + dz).toFixed(3));
+      .replace(/(<feeder class="org\.openpnp\.machine\.reference\.feeder\.ReferenceStripFeeder"[^>]*>\s*<location units="Millimeters" x="[-\d.]+" y="[-\d.]+" z=")([-\d.]+)/g, (all, a, fz) => a + (+fz + dz).toFixed(3));
   }
   return { files: out, fit, job: { board: boardName, x: B.x, y: B.y, z } };
 }

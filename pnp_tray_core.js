@@ -16,7 +16,7 @@
   const S = typeof module !== 'undefined' && module.exports ? require('./pnp_stand_core.js') : root.PnpStand;
   const { distPointRect, rectsOverlap, distSegRect } = S._;
 
-  const VERSION = 3;
+  const VERSION = 4;
 
   // ------------------------------------------------------------------ tray parameters
   const DEFAULT_TRAY = {
@@ -39,12 +39,14 @@
     laneLen: 0,         // channel length between the caps; 0 = choose the one using the least plate area
     series: true,       // several sections may share one lane end to end
     gap: 2.0,           // clearance to stands, board, keep-outs and other trays
-    holder: 'tray',     // 'tray' = our printed cut-tape trays, 'opulo' = Opulo LumenPnP strip feeders
-    opTypes: '8:3:40 12:3:56.2 16:2:48 24:1:36 32:1:44', // Opulo feeder per tape width: W:strips:width across[:how many you have]
+    holder: 'tray',     // 'tray' = our printed cut-tape trays, 'opulo' = Opulo LumenPnP printed tray feeders
+    opTypes: '8:3:40:15 12:3:56.2:15 16:2:48:20 24:1:36 32:1:44', // Opulo feeder per tape width: W:channels:width across[:channel pitch]
+    opHave: '',         // feeders you own per width, '8:10 12:2' (empty = no limit)
+    opGap: 5,           // gap between two sections in one channel, mm
     opLen: 120,         // Opulo feeder length (all widths)
-    opUsable: 110,      // tape length per strip that can be picked from (guess: feeder length minus the ends)
-    opOrient: 90,       // 90 = strips run front to back across the plate (bolts like A15 + G15), 180 = along the rows
-    opZ: 8.0,           // tape surface above the plate top (guess: teach it)
+    opUsable: 116,      // channel length that can hold parts (Opulo: 125 mm strip in the 120 mm feeder, 30 parts at 4 mm; guess)
+    opOrient: 90,       // 90 = channels run front to back across the plate (bolts like A15 + G15), 180 = along the rows
+    opZ: 9.0,           // pick Z above the plate top. Host: tray feeders at Z 14.0-14.9 with the board top at 16.0 (8.6 + 1.6 above the plate): ~9 (teach it)
   };
 
   // ------------------------------------------------------------------ BOM
@@ -451,48 +453,72 @@
     return rows;
   }
 
-  // ------------------------------------------------------------------ Opulo LumenPnP strip feeders
-  // opulo.io "LumenPnP Strip Feeder": 8 and 12 mm hold 3 strips, 16 mm 2, 24 / 32 mm 1; all 120 mm long; two M3 screws
-  // into grid holes (e.g. A15 + G15), 90 or 180 deg. Width across the strips: 8 mm 40, 12 mm 56.2 from Opulo's FreeCAD
-  // files (src/FDM/*-strip-feeder.FCStd); 16 / 24 / 32 mm are guesses. The base has a 15 mm hole grid, so any plate holes
-  // under it can take the screws.
+  // ------------------------------------------------------------------ Opulo LumenPnP printed tray feeders
+  // opulo.io sells them as "LumenPnP Strip Feeder"; Opulo's docs set them up in OpenPnP as ReferenceTrayFeeders (pick
+  // location + per-part offset + count, no sprocket vision), so cut tape can start anywhere in a channel.
+  // 8 and 12 mm hold 3 channels, 16 mm 2, 24 / 32 mm 1; all 120 mm long; two M3 screws into grid holes (e.g. A15 + G15).
+  // Width across: 8 mm 40, 12 mm 56.2 (Opulo's FreeCAD, src/FDM/*-strip-feeder.FCStd); channel pitch 15 mm (the CAD's
+  // 3 x 15 mm channel pattern; the LumenPnP host's own tray feeders sit 14.9 mm apart). 16 / 24 / 32 mm are guesses.
+  // The base has a 15 mm hole grid, so any plate holes under it can take the screws.
 
-  /** "8:3:40 12:3:56.2 ..." -> { 8: {tapeW, strips, across, have}, ... } (have 0 = no limit) */
+  /** "8:3:40:15 12:3:56.2:15 ..." -> { 8: {tapeW, strips (channels), across, pitch}, ... }; pitch 0 / missing = across / channels */
   function opuloTypes(text) {
     const out = {};
     for (const tok of String(text || '').split(/[\s,;]+/)) {
-      const m = tok.match(/^(\d+):(\d+):(\d+(?:\.\d+)?)(?::(\d+))?$/);
-      if (m) out[+m[1]] = { tapeW: +m[1], strips: +m[2], across: +m[3], have: m[4] ? +m[4] : 0 };
+      const m = tok.match(/^(\d+):(\d+):(\d+(?:\.\d+)?)(?::(\d+(?:\.\d+)?))?$/);
+      if (m) out[+m[1]] = { tapeW: +m[1], strips: +m[2], across: +m[3], pitch: m[4] && +m[4] > 0 ? +m[4] : +m[3] / +m[2] };
     }
+    return out;
+  }
+  /** "8:10 12:2" -> { 8: 10, 12: 2 } feeders you own per tape width */
+  function opuloHave(text) {
+    const out = {};
+    for (const tok of String(text || '').split(/[\s,;]+/)) { const m = tok.match(/^(\d+):(\d+)$/); if (m) out[+m[1]] = +m[2]; }
     return out;
   }
 
   /**
-   * Strips per ticked line (parts = qty x boards + spares; a strip holds floor(usable / pitch) - leader), then strips of
-   * one tape width fill feeders of that width in line order (a line's strips stay together).
-   * Returns { feeders: [{num, tapeW, type, strips:[{id, line, k, of, parts, cap}], len, across}], counts, need, problems }
+   * Same length rule as our trays: a section per ticked line, (parts + empty pockets) x pitch + slack (min shortest
+   * section); parts = qty x boards + spares. A line longer than a channel is split over channels. Sections of one tape
+   * width go end to end in channels (first-fit decreasing, tp.opGap between them), channels fill feeders of that width.
+   * Returns { feeders: [{num, tapeW, type, channels:[{sections:[{id, line, k, of, count, tape, a0, a1}], used}], len, across}],
+   *           sections, counts, need, have, problems }
    */
   function opuloPack(lines, tp) {
-    const types = opuloTypes(tp.opTypes), problems = [], strips = [], counts = {};
+    const types = opuloTypes(tp.opTypes), have = opuloHave(tp.opHave), problems = [], secs = [], counts = {};
+    const usable = Math.min(tp.opUsable, tp.opLen);
     for (const l of lines.filter((x) => x.use)) {
-      const count = Math.ceil(l.qty * tp.boards) + tp.spares;
-      counts[l.id] = count;
+      const s0 = sectionOf(l, tp);
+      counts[l.id] = s0.count;
       const t = types[l.tapeW];
       if (!t) { problems.push(`#${l.id} ${l.value.split(' / ')[0]}: no Opulo feeder type for ${l.tapeW} mm tape (add one to the feeder types)`); continue; }
-      const cap = Math.max(1, Math.floor(tp.opUsable / l.pitch) - tp.leader);
-      const n = Math.max(1, Math.ceil(count / cap));
-      for (let k = 0; k < n; k++) strips.push({ id: l.id, line: l, k: k + 1, of: n, parts: Math.min(cap, count - k * cap), cap, tapeW: l.tapeW });
+      const cap = Math.max(1, Math.floor((usable - tp.endClr) / l.pitch) - tp.leader); // parts in one full channel
+      const n = Math.max(1, Math.ceil(s0.count / cap));
+      for (let k = 0; k < n; k++) {
+        const count = Math.min(cap, s0.count - k * cap);
+        secs.push({ id: l.id, line: l, k: k + 1, of: n, count, cap, tapeW: l.tapeW, tape: Math.min(usable, Math.max(tp.minSection, (count + tp.leader) * l.pitch + tp.endClr)) });
+      }
     }
     const feeders = [];
-    for (const W of [...new Set(strips.map((s) => s.tapeW))].sort((a, b) => a - b)) {
-      const t = types[W], list = strips.filter((s) => s.tapeW === W).sort((a, b) => a.id - b.id || a.k - b.k);
-      for (let i = 0; i < list.length; i += t.strips) feeders.push({ tapeW: W, type: t, strips: list.slice(i, i + t.strips), len: tp.opLen, across: t.across });
+    for (const W of [...new Set(secs.map((s) => s.tapeW))].sort((a, b) => a - b)) {
+      const t = types[W];
+      // a gap after every section; the channel takes usable + one gap so the last section needs none
+      // TODO(pack) FFD can leave a near-empty channel (MONK panel: one 8 mm channel holds only a 16 mm section) that
+      //   costs a whole feeder; try a few orderings / a small search when the channel count is one over a multiple of 3.
+      const bins = ffd(secs.filter((s) => s.tapeW === W), (s) => s.tape + tp.opGap, usable + tp.opGap);
+      const channels = bins.map((b) => {
+        const sections = b.items.slice().sort((x, y) => x.id - y.id || x.k - y.k);
+        let a = 0;
+        for (const s of sections) { s.a0 = a; s.a1 = a + s.tape; a = s.a1 + tp.opGap; }
+        return { sections, used: a - tp.opGap };
+      }).sort((x, y) => x.sections[0].id - y.sections[0].id);
+      for (let i = 0; i < channels.length; i += t.strips) feeders.push({ tapeW: W, type: t, channels: channels.slice(i, i + t.strips), len: tp.opLen, across: t.across, usable });
     }
-    feeders.forEach((f, i) => { f.index = i; f.num = i + 1; });
+    feeders.forEach((f, i) => { f.index = i; f.num = i + 1; f.channels.forEach((c, k) => { c.num = k + 1; c.sections.forEach((s) => { s.feeder = f.num; s.channel = k + 1; }); }); });
     const need = {};
     for (const f of feeders) need[f.tapeW] = (need[f.tapeW] || 0) + 1;
-    for (const W of Object.keys(need)) if (types[W].have && need[W] > types[W].have) problems.push(`needs ${need[W]} × ${W} mm feeders, you have ${types[W].have}`);
-    return { opulo: true, feeders, strips, counts, need, types, problems, tp };
+    for (const W of Object.keys(need)) if (have[W] && need[W] > have[W]) problems.push(`needs ${need[W]} × ${W} mm feeders, you have ${have[W]}`);
+    return { opulo: true, feeders, sections: secs, counts, need, have, types, problems, tp };
   }
 
   /** Footprint of one feeder on the plates: dx along the rows (X), dy across (Y) */
@@ -557,42 +583,44 @@
   }
 
   /**
-   * Strip ballparks for the setup sheet / OpenPnP (plate frame): strips evenly across the feeder.
-   * 90 deg: strips run along Y, sprocket holes on the left (-X), fed back to front (OpenPnP auto setup wants the holes on
-   * the right of the feed direction). 180 deg: along X, holes toward the front (-Y), fed left to right.
+   * Where each section's channel runs on the plates (plate frame), and the tray-feeder numbers for OpenPnP.
+   * Channels at the type's pitch about the feeder centre line. 90 deg: channels run along Y, first part at the back,
+   * the next ones toward the front (offset -pitch in Y, as the LumenPnP host's own tray feeders). 180 deg: along X, first
+   * part at the left, offset +pitch in X. first = the first part (after the empty pockets); the pocket's offset from the
+   * channel centre line is not modelled (teach it). Returns [{sec, channel, first:{x,y}, offset:{x,y}, n, lane:{a0,a1 in mm on the plates}, c, z}]
    */
   function opuloCoords(f, pos, tp) {
-    const n = f.type.strips, rows = [];
-    f.strips.forEach((s, i) => {
-      const W = s.tapeW, toPocket = pocketFromEdge(W) - 1.75;
-      let r;
-      if (+tp.opOrient === 180) {
-        const c = pos.rect.y0 + ((i + 0.5) * (pos.rect.y1 - pos.rect.y0)) / n, sy = c - W / 2 + 1.75;
-        r = { ref: { x: pos.rect.x0 + 6, y: sy }, last: { x: pos.rect.x1 - 6, y: sy }, first: { x: pos.rect.x0 + 6, y: sy + toPocket } };
-      } else {
-        const c = pos.rect.x0 + ((i + 0.5) * (pos.rect.x1 - pos.rect.x0)) / n, sx = c - W / 2 + 1.75;
-        r = { ref: { x: sx, y: pos.rect.y1 - 6 }, last: { x: sx, y: pos.rect.y0 + 6 }, first: { x: sx + toPocket, y: pos.rect.y1 - 6 } };
+    const n = f.type.strips, rows = [], r = pos.rect, along180 = +tp.opOrient === 180;
+    const end = (f.len - f.usable) / 2; // unusable length at each end of a channel
+    f.channels.forEach((ch, i) => {
+      const off = (i - (n - 1) / 2) * f.type.pitch;
+      const c = along180 ? (r.y0 + r.y1) / 2 + off : (r.x0 + r.x1) / 2 + off;
+      for (const s of ch.sections) {
+        const p = s.line.pitch, firstA = s.a0 + (tp.leader + 0.5) * p;
+        const row = { sec: s, channel: i + 1, n: s.count, z: tp.opZ, c };
+        if (along180) Object.assign(row, { first: { x: r.x0 + end + firstA, y: c }, offset: { x: p, y: 0 }, lane: { a0: r.x0 + end + s.a0, a1: r.x0 + end + s.a1 } });
+        else Object.assign(row, { first: { x: c, y: r.y1 - end - firstA }, offset: { x: 0, y: -p }, lane: { a0: r.y1 - end - s.a1, a1: r.y1 - end - s.a0 } });
+        rows.push(row);
       }
-      rows.push({ ...r, strip: i + 1, s, z: tp.opZ });
     });
     return rows;
   }
 
-  /** Feeder / strip table as CSV */
+  /** Feeder / channel / section table as CSV */
   function opuloCsv(lines, op, placements) {
     const esc = (v) => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const hdr = ['feeder', 'tape W', 'strip', 'line', 'value', 'footprint', 'refs', 'mpn', 'strip k of n', 'parts in strip', 'strip holds', 'pitch', 'carrier', 'bolts', 'first part X', 'first part Y', 'note'];
+    const hdr = ['feeder', 'tape W', 'channel', 'line', 'value', 'footprint', 'refs', 'mpn', 'section k of n', 'parts', 'cut length mm', 'starts at mm', 'pitch', 'carrier', 'bolts', 'first part X', 'first part Y', 'note'];
     const out = [];
     for (const f of op.feeders) {
       const p = placements && placements[f.index];
       const co = p && p.ok ? opuloCoords(f, p, op.tp) : [];
-      f.strips.forEach((s, i) => {
-        const l = s.line, c = co[i];
-        out.push([`O${f.num}`, f.tapeW, i + 1, l.id, l.value, l.footprint, l.refs.join(' '), l.mpn, `${s.k}/${s.of}`, s.parts, s.cap, l.pitch, l.carrier,
+      for (const ch of f.channels) for (const s of ch.sections) {
+        const l = s.line, c = co.find((x) => x.sec === s);
+        out.push([`O${f.num}`, f.tapeW, ch.num, l.id, l.value, l.footprint, l.refs.join(' '), l.mpn, `${s.k}/${s.of}`, s.count, s.tape.toFixed(0), s.a0.toFixed(0), l.pitch, l.carrier,
           p && p.ok ? p.bolts.map((b) => b.name).join(' + ') : 'not placed', c ? c.first.x.toFixed(1) : '', c ? c.first.y.toFixed(1) : '', l.tapeNote].map(esc).join(','));
-      });
+      }
     }
-    for (const l of lines.filter((x) => !x.use)) out.push(['', l.tapeW, '', l.id, l.value, l.footprint, l.refs.join(' '), l.mpn, '', '', '', l.pitch, l.carrier, 'hand place / not in a feeder', '', '', l.tapeNote].map(esc).join(','));
+    for (const l of lines.filter((x) => !x.use)) out.push(['', l.tapeW, '', l.id, l.value, l.footprint, l.refs.join(' '), l.mpn, '', '', '', '', l.pitch, l.carrier, 'hand place / not in a feeder', '', '', l.tapeNote].map(esc).join(','));
     return hdr.join(',') + '\n' + out.join('\n') + '\n';
   }
 
@@ -649,7 +677,7 @@
   }
 
   const api = { VERSION, DEFAULT_TRAY, parseCsv, parseBom, linesFromParts, isDigiKeyOrder, applyOrder, valueKey, tapeFor, pocketFromEdge, sectionOf, capOf, pack, plan, rowXs, rowHoles, capBolts, tryTray, placeTrays, sectionCoords, traySolid, sectionsCsv,
-    blockedWhy, opuloTypes, opuloPack, opuloDims, tryOpulo, placeOpulo, opuloCoords, opuloCsv };
+    blockedWhy, opuloTypes, opuloHave, opuloPack, opuloDims, tryOpulo, placeOpulo, opuloCoords, opuloCsv };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PnpTray = api;
 })(typeof window !== 'undefined' ? window : globalThis);

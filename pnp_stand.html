@@ -201,20 +201,25 @@ td input[type=number] { width: 58px; }
   </details>
 
   <details open>
-    <summary>6 · Cut tape: trays or strip feeders</summary>
-    <div class="muted">One BOM line per reel (grouped by value + footprint like <code>bom_reels.py</code>). <b>Our trays</b>: one section per line, sections share lanes, lanes share trays, printed here. <b>Opulo strip feeders</b>: strips per line by tape width, strips fill Opulo LumenPnP feeders (8 / 12 mm hold 3 strips). Drag a tray or feeder to move it.</div>
-    <label><span>Holder</span><select id="tp_holder"><option value="tray">our cut-tape trays (printed here)</option><option value="opulo">Opulo LumenPnP strip feeders</option></select></label>
+    <summary>6 · Cut tape: our trays or Opulo tray feeders</summary>
+    <div class="muted">One BOM line per reel (grouped by value + footprint like <code>bom_reels.py</code>). Each line gets a section of cut tape: (parts + empty pockets) × pitch. <b>Our trays</b>: sections share lanes, lanes share trays, printed here. <b>Opulo tray feeders</b>: sections go end to end in the channels of Opulo's printed feeders (8 / 12 mm: 3 channels), with a gap between them; OpenPnP gets one tray feeder per section. Drag a tray or feeder to move it.</div>
+    <label><span>Holder</span><select id="tp_holder"><option value="tray">our cut-tape trays (printed here)</option><option value="opulo">Opulo LumenPnP printed tray feeders</option></select></label>
     <div class="row"><button class="primary" id="openBom" title="KiCad BOM CSV (Qty per board), or a DigiKey order CSV (Qty = what you ordered; needs the .kicad_pcb open)">Open BOM / DigiKey order .csv…</button><input type="file" id="bomFile" accept=".csv" hidden></div>
     <div id="bomInfo" class="muted"></div>
     <label><span>Boards per run</span><input type="number" id="tp_boards" step="1" min="1"></label>
     <label><span>Spare parts per line</span><input type="number" id="tp_spares" step="1" min="0"></label>
     <label><span>Empty pockets at the start</span><input type="number" id="tp_leader" step="1" min="0"></label>
     <div id="opuloOnly">
-      <label><span>Feeder types</span><input type="text" id="tp_opTypes" title="One per tape width: W:strips:width across[:how many you have]. Opulo: 8 and 12 mm hold 3 strips, 16 mm 2, 24 / 32 mm 1. Widths across for 8 / 12 mm from Opulo's CAD (40, 56.2); 16 / 24 / 32 are guesses. With 'have', the plan reports a shortage"></label>
-      <label><span>Orientation</span><select id="tp_opOrient"><option value="90">90°: strips front → back (bolts like A15 + G15)</option><option value="180">180°: strips along the rows</option></select></label>
-      <label><span>Usable strip length</span><input type="number" id="tp_opUsable" step="1" min="10" title="Tape length per strip you can pick from (feeder is 120 mm; guess 110). A strip holds floor(this / pitch) − empty pockets"></label>
-      <label><span>Feeder length</span><input type="number" id="tp_opLen" step="1"></label>
-      <label><span>Tape surface above plate</span><input type="number" id="tp_opZ" step="0.1" title="Feeder Z for OpenPnP (guess; teach it on the machine)"></label>
+      <label><span>Feeders you have</span><input type="text" id="tp_opHave" placeholder="e.g. 8:10 12:2" title="Per tape width, how many Opulo feeders you own (W:count). The plan reports a shortage. Empty = no limit"></label>
+      <label><span>Gap between sections</span><input type="number" id="tp_opGap" step="1" min="0" title="Space between two cut strips in one channel, mm"></label>
+      <label><span>Orientation</span><select id="tp_opOrient"><option value="90">90°: channels front → back (bolts like A15 + G15)</option><option value="180">180°: channels along the rows</option></select></label>
+      <details>
+        <summary class="muted">Feeder dimensions</summary>
+        <label><span>Feeder types</span><input type="text" id="tp_opTypes" title="One per tape width: W:channels:width across[:channel pitch]. Opulo: 8 and 12 mm have 3 channels, 16 mm 2, 24 / 32 mm 1. 8 / 12 mm width and the 15 mm pitch from Opulo's CAD (the host's tray feeders sit 14.9 mm apart); 16 / 24 / 32 are guesses"></label>
+        <label><span>Usable channel length</span><input type="number" id="tp_opUsable" step="1" min="10" title="Channel length that can hold parts (feeder 120 mm; Opulo cuts 125 mm strips, 30 parts at 4 mm; guess 116)"></label>
+        <label><span>Feeder length</span><input type="number" id="tp_opLen" step="1"></label>
+        <label><span>Pick Z above plate</span><input type="number" id="tp_opZ" step="0.1" title="Tray feeder Z for OpenPnP. From the host's own tray feeders (Z 14.0-14.9 with the board top at 16.0): ~9. Teach it on the machine"></label>
+      </details>
     </div>
     <div id="trayOnly">
     <label><span>Max tray width</span><input type="number" id="tp_maxTrayW" step="5" min="20"></label>
@@ -268,13 +273,31 @@ td input[type=number] { width: 58px; }
 <script src="vendor/jscad-modeling.min.js"></script>
 <script>if (!window.jscadModeling) document.write('<script src="https://unpkg.com/@jscad/modeling@2.12.5/dist/jscad-modeling.min.js"><\/script>');</script>
 <script src="pnp_stand_core.js?v=5"></script>
-<script src="pnp_tray_core.js?v=3"></script>
-<script src="pnp_openpnp_core.js?v=2"></script>
+<script src="pnp_tray_core.js?v=4"></script>
+<script src="pnp_openpnp_core.js?v=3"></script>
 <script>
 'use strict';
+// ------------------------------------------------------------------------------------------------ UI to-dos (2026-11-09)
+// Ranked by how much they'd save on a real run. Each is independent.
+// TODO(ui-1) Machine calibration once, not per board: reference hole + machine X/Y, plate Z, measured board Z and taught
+//   fiducials in one "Machine" record (saved with the machine profile), so section 5 / 7 values and fit_fiducials.js
+//   (fiducials -> machine coords) run inside the page instead of a Node CLI. Biggest source of hand steps today.
+// TODO(ui-2) "Export everything" button: one zip with stand STLs, tray STLs (if trays), Setup CSV, print sheet (HTML),
+//   OpenPnP project and project JSON. Today it's 4-5 buttons in 3 sections.
+// TODO(ui-3) Per-board saved state: localStorage holds one layout; key it by board name and list recent boards, so
+//   opening another board doesn't overwrite the panel layout (the taught fiducials depend on that layout).
+// TODO(ui-4) Line table: show where each line went (T1 L2 / O3 C2 @40) and hover / click to highlight its section on the
+//   plates (and the reverse: hover a section -> row). Bulk untick by kind (connectors, QFP / BGA, switches).
+// TODO(ui-5) Guided steps: a status chip per section (✓ board, ✓ stands fit, ✓ BOM, ✓ trays / feeders placed, ✓ OpenPnP)
+//   at the top of the sidebar, each jumps to its section; collapse finished sections.
+// TODO(ui-6) Hide expert fields by default (stand pin / boss / corner-mode details, tray wall dimensions) behind
+//   "Advanced", keep height, bolt preset, floor under nut, boards per run, spares, holder visible.
+// TODO(ui-7) Undo for drags (Ctrl+Z) and a lock toggle per tray / feeder, so Pack + place keeps hand-placed ones.
+// TODO(ui-8) Opulo: per-section part rotation (tape-relative, like OpenPnP's "Rotation in Tape") in the line table and
+//   written to the tray feeders, instead of 0 + fix on the machine.
 const S = window.PnpStand, TR = window.PnpTray, OP = window.PnpOpenPnP;
 // the browser can keep an old copy of the core after an update; say so instead of failing later
-const CORE_VERSION = 5, TRAY_VERSION = 3, OPENPNP_VERSION = 2;
+const CORE_VERSION = 5, TRAY_VERSION = 4, OPENPNP_VERSION = 3;
 if (!S || S.VERSION !== CORE_VERSION || !TR || TR.VERSION !== TRAY_VERSION || !OP || OP.VERSION !== OPENPNP_VERSION) {
   addEventListener('DOMContentLoaded', () => {
     const b = document.createElement('div');
@@ -820,12 +843,12 @@ function opuloSheet() {
   const { op, pl } = TRAYS;
   if (!op.feeders.length) return '';
   const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const rows = op.feeders.flatMap((f, i) => f.strips.map((st, k) => `<tr><td><b>O${f.num}</b> S${k + 1}</td><td>${f.tapeW} mm</td><td><b>${st.id}</b></td><td>${esc(st.line.value)}</td><td>${esc(fpShort(st.line.footprint))}</td><td>${st.parts}${st.of > 1 ? ` (${st.k}/${st.of})` : ''}</td><td>${st.line.pitch} mm ${st.line.carrier}</td><td>${pl[i] && pl[i].ok ? pl[i].bolts.map((b) => b.name).join(' + ') : 'not placed'}</td></tr>`)).join('');
+  const rows = op.feeders.flatMap((f, i) => f.channels.flatMap((ch) => ch.sections.map((s) => `<tr><td><b>O${f.num}</b> C${ch.num}</td><td>${f.tapeW} mm</td><td><b>${s.id}</b></td><td>${esc(s.line.value)}</td><td>${esc(fpShort(s.line.footprint))}</td><td>${s.count}${s.of > 1 ? ` (${s.k}/${s.of})` : ''}</td><td>${s.tape.toFixed(0)} mm @ ${s.a0.toFixed(0)}</td><td>${s.line.pitch} mm ${s.line.carrier}</td><td>${pl[i] && pl[i].ok ? pl[i].bolts.map((b) => b.name).join(' + ') : 'not placed'}</td></tr>`))).join('');
   const need = Object.entries(op.need).map(([W, n]) => `${n} × ${W} mm`).join(', ');
   const hand = state.tray.bom.lines.filter((l) => !l.use).map((l) => `${l.id} ${esc(l.value)} (${l.refs.join(' ')})`).join(', ');
-  const dir = +state.tray.tp.opOrient === 180 ? 'strips along the rows, sprocket holes toward the front, first part at the left end' : 'strips front to back, sprocket holes on the left, first part at the back end';
-  return `<h3>Opulo strip feeders (${state.tray.tp.boards} board(s) per run): ${need}</h3><p>S1 = the strip at the feeder's left / front. ${dir} (OpenPnP auto setup: click the first part, then the next one toward the end).</p>
-    <table><thead><tr><th>Feeder / strip</th><th>Tape</th><th>#</th><th>Value</th><th>Footprint</th><th>Parts</th><th>Pitch</th><th>Bolts</th></tr></thead><tbody>${rows}</tbody></table>` +
+  const dir = +state.tray.tp.opOrient === 180 ? 'channels along the rows, C1 at the front, "@" measured from the left end' : 'channels front to back, C1 on the left, "@" measured from the back end';
+  return `<h3>Opulo tray feeders (${state.tray.tp.boards} board(s) per run): ${need}</h3><p>${dir}. Cut each strip to its length, ${state.tray.tp.opGap} mm gap between strips in a channel; first part ${state.tray.tp.leader} pocket(s) in. OpenPnP: one tray feeder per row (PLAN-&lt;line&gt;).</p>
+    <table><thead><tr><th>Feeder / channel</th><th>Tape</th><th>#</th><th>Value</th><th>Footprint</th><th>Parts</th><th>Cut / starts at</th><th>Pitch</th><th>Bolts</th></tr></thead><tbody>${rows}</tbody></table>` +
     (hand ? `<p>Hand place: ${hand}</p>` : '');
 }
 $('saveBtn').onclick = () => download(`${baseName()}_stands.json`, JSON.stringify(state, null, 1), 'application/json');
@@ -841,8 +864,8 @@ $('loadFile').addEventListener('change', async (e) => {
 
 // ------------------------------------------------------------ cut-tape trays
 const TP_KEYS = ['holder', 'boards', 'spares', 'leader', 'maxTrayW', 'laneLen', 'series', 'chClr', 'rib', 'sideWall', 'base', 'recessPaper', 'recessEmb', 'groove',
-  'labelBlock', 'labelH', 'labelDepth', 'minSection', 'endClr', 'gap', 'opTypes', 'opOrient', 'opUsable', 'opLen', 'opZ'];
-const TP_TEXT = ['holder', 'opTypes'];
+  'labelBlock', 'labelH', 'labelDepth', 'minSection', 'endClr', 'gap', 'opTypes', 'opHave', 'opGap', 'opOrient', 'opUsable', 'opLen', 'opZ'];
+const TP_TEXT = ['holder', 'opTypes', 'opHave'];
 const isOpulo = () => state.tray.tp.holder === 'opulo';
 function holderVis() {
   $('opuloOnly').style.display = isOpulo() ? '' : 'none';
@@ -976,14 +999,15 @@ function refreshTrays() {
 }
 function refreshOpulo() {
   const { op, pl } = TRAYS, bad = pl.filter((p) => !p || !p.ok).length;
-  const need = Object.entries(op.need).map(([W, n]) => `${n} × ${W} mm${op.types[W] && op.types[W].have ? ' (have ' + op.types[W].have + ')' : ''}`).join(', ');
+  const need = Object.entries(op.need).map(([W, n]) => `${n} × ${W} mm${op.have[W] ? ' (have ' + op.have[W] + ')' : ''}`).join(', ');
   $('trayStatus').innerHTML = (op.problems.length ? `<div class="err">${op.problems.map((x) => '• ' + x).join('\n')}</div>` : '') +
-    (op.feeders.length ? (bad ? `<div class="err">✗ ${bad} of ${op.feeders.length} feeder(s) don't fit where they are: drag them or press Pack + place</div>` : `<span class="okc">✓ ${op.strips.length} strips in ${op.feeders.length} Opulo feeder(s): ${need}</span>`) : '');
+    (op.feeders.length ? (bad ? `<div class="err">✗ ${bad} of ${op.feeders.length} feeder(s) don't fit where they are: drag them or press Pack + place</div>` : `<span class="okc">✓ ${op.sections.length} sections in ${op.feeders.length} Opulo feeder(s): ${need}</span>`) : '');
   const hand = state.tray.bom.lines.filter((l) => !l.use).map((l) => `#${l.id} ${l.value.split(' / ')[0]}`).join(', ');
+  // channel C1 is the leftmost (90°) / frontmost (180°); a section starts "@ mm" from the channel's first end (back / left)
   $('trayList').textContent = op.feeders.map((f, i) => {
     const p = pl[i];
-    return `O${f.num}  ${f.tapeW} mm feeder, ${f.strips.length}/${f.type.strips} strips` + (p && p.ok ? `, bolts ${p.bolts.map((b) => b.name).join(' + ')}` : `  ✗ ${p ? p.why : 'not placed'}`) + '\n' +
-      f.strips.map((st, k) => `  S${k + 1}  #${st.id} ${st.line.value.split(' / ')[0].slice(0, 18)}${st.of > 1 ? ` (strip ${st.k} of ${st.of})` : ''}: ${st.parts} parts (strip holds ${st.cap}, ${st.line.pitch} mm pitch)`).join('\n');
+    return `O${f.num}  ${f.tapeW} mm feeder, ${f.channels.length}/${f.type.strips} channels` + (p && p.ok ? `, bolts ${p.bolts.map((b) => b.name).join(' + ')}` : `  ✗ ${p ? p.why : 'not placed'}`) + '\n' +
+      f.channels.map((ch) => `  C${ch.num} (${ch.used.toFixed(0)} of ${f.usable} mm): ` + ch.sections.map((s) => `#${s.id} ${s.count} pcs${s.of > 1 ? ` [${s.k}/${s.of}]` : ''} ${s.tape.toFixed(0)} mm @${s.a0.toFixed(0)}`).join('  →  ')).join('\n');
   }).join('\n\n') + (hand ? `\n\nHand place / not in a feeder: ${hand}` : '');
 }
 function drawOpulo(g) {
@@ -994,15 +1018,17 @@ function drawOpulo(g) {
     const r = p.rect, grp = el('g', { 'data-tray': f.num, style: 'cursor: move' }, g);
     el('title', {}, grp).textContent = `Opulo feeder O${f.num} (${f.tapeW} mm)` + (p.ok ? '' : ': ' + p.why);
     el('rect', { x: r.x0, y: sy(r.y1), width: r.x1 - r.x0, height: r.y1 - r.y0, fill: css('--tray'), stroke: p.ok ? css('--tray-edge') : css('--bad'), 'stroke-width': p.ok ? 0.5 : 1.2 }, grp);
-    const n = f.type.strips, along180 = +tp.opOrient === 180;
-    f.strips.forEach((st, k) => {
-      const w = st.tapeW;
-      const c = along180 ? r.y0 + ((k + 0.5) * (r.y1 - r.y0)) / n : r.x0 + ((k + 0.5) * (r.x1 - r.x0)) / n;
-      const lane = along180 ? { x: r.x0 + 3, y: sy(c + w / 2), width: r.x1 - r.x0 - 6, height: w } : { x: c - w / 2, y: sy(r.y1 - 3), width: w, height: r.y1 - r.y0 - 6 };
-      el('rect', { ...lane, fill: css('--tray-lane'), stroke: 'none' }, grp);
-      const tx = el('text', { x: along180 ? r.x0 + 8 : c, y: along180 ? sy(c) + 1.4 : sy(r.y1 - 10), 'font-size': Math.min(4, w * 0.45), 'text-anchor': 'middle', 'font-weight': 700, fill: css('--tray-edge'), 'pointer-events': 'none' }, grp);
-      tx.textContent = st.id;
-    });
+    const along180 = +tp.opOrient === 180;
+    // each section where it goes in its channel (same numbers as the list and the OpenPnP pick locations)
+    for (const c of TR.opuloCoords(f, p, tp)) {
+      const w = c.sec.tapeW, a = c.lane;
+      const box = along180 ? { x: a.a0, y: sy(c.c + w / 2), width: a.a1 - a.a0, height: w } : { x: c.c - w / 2, y: sy(a.a1), width: w, height: a.a1 - a.a0 };
+      el('rect', { ...box, fill: css('--tray-lane'), stroke: css('--tray-edge'), 'stroke-width': 0.2 }, grp);
+      const mid = (a.a0 + a.a1) / 2;
+      const tx = el('text', { x: along180 ? mid : c.c, y: along180 ? sy(c.c) + 1.4 : sy(mid) + 1.4, 'font-size': Math.min(4, w * 0.45), 'text-anchor': 'middle', 'font-weight': 700, fill: css('--tray-edge'), 'pointer-events': 'none' }, grp);
+      tx.textContent = c.sec.id;
+      el('circle', { cx: c.first.x, cy: sy(c.first.y), r: 0.6, fill: css('--tray-edge'), 'pointer-events': 'none' }, grp); // first pick
+    }
     const tt = el('text', { x: r.x0 + 1, y: sy(r.y0) - 1.5, 'font-size': 4.5, fill: css('--tray-edge'), 'font-weight': 700, 'pointer-events': 'none' }, grp);
     tt.textContent = 'O' + f.num;
     if (p.bolts) for (const b of p.bolts) {
@@ -1090,7 +1116,7 @@ $('opBtn').onclick = () => {
     const enc = new TextEncoder(), dir = prj.name + '_openpnp/';
     download(`${prj.name}_openpnp.zip`, S.zipStore(prj.files.map((f) => ({ name: dir + f.name, data: enc.encode(f.text) }))), 'application/zip');
     $('opNotes').innerHTML = prj.notes.map((n) => '• ' + n.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('<br>');
-    setStatus(`✓ OpenPnP project: ${prj.counts.place} to place, ${prj.counts.ignore} ignored, ${prj.counts.fid} fiducials, ${prj.feeders.length} strip feeders`, 'ok');
+    setStatus(`✓ OpenPnP project: ${prj.counts.place} to place, ${prj.counts.ignore} ignored, ${prj.counts.fid} fiducials, ${prj.feeders.length} feeders`, 'ok');
   } catch (err) { setStatus('OpenPnP export failed: ' + err.message, 'bad'); }
 };
 
