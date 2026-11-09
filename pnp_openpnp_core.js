@@ -16,7 +16,7 @@
   const node = typeof module !== 'undefined' && module.exports;
   const S = node ? require('./pnp_stand_core.js') : root.PnpStand;
   const TR = node ? require('./pnp_tray_core.js') : root.PnpTray;
-  const VERSION = 1;
+  const VERSION = 2;
 
   // OpenPnP 2.4 default ReferenceStripFeeder vision pipeline (copied from its default machine.xml)
   const STRIP_PIPELINE = "<pipeline>\n               <stages>\n                  <cv-stage class=\"org.openpnp.vision.pipeline.stages.ImageCapture\" name=\"original\" enabled=\"true\" default-light=\"true\" settle-option=\"Settle\" count=\"1\"/>\n                  <cv-stage class=\"org.openpnp.vision.pipeline.stages.BlurMedian\" name=\"cleanup-original\" enabled=\"true\" kernel-size=\"5\"/>\n                  <cv-stage class=\"org.openpnp.vision.pipeline.stages.ConvertColor\" name=\"gray\" enabled=\"true\" conversion=\"Bgr2Gray\"/>\n                  <cv-stage class=\"org.openpnp.vision.pipeline.stages.DetectEdgesCanny\" name=\"find-edges\" enabled=\"true\" threshold-1=\"5.0\" threshold-2=\"15.0\"/>\n                  <cv-stage class=\"org.openpnp.vision.pipeline.stages.BlurGaussian\" name=\"predetect-1\" enabled=\"true\" kernel-size=\"5\" property-name=\"BlurGaussian\"/>\n                  <cv-stage class=\"org.openpnp.vision.pipeline.stages.BlurMedian\" name=\"predetect-2\" enabled=\"false\" kernel-size=\"7\"/>\n                  <cv-stage class=\"org.openpnp.vision.pipeline.stages.DetectFixedCirclesHough\" name=\"results\" enabled=\"true\" dp=\"1.0\" param-1=\"25.0\" param-2=\"20.0\"/>\n                  <cv-stage class=\"org.openpnp.vision.pipeline.stages.ImageRecall\" name=\"recalled\" enabled=\"true\" image-stage-name=\"original\"/>\n                  <cv-stage class=\"org.openpnp.vision.pipeline.stages.DrawCircles\" name=\"display\" enabled=\"true\" circles-stage-name=\"results\" thickness=\"1\">\n                     <color r=\"255\" g=\"0\" b=\"0\" a=\"255\"/>\n                  </cv-stage>\n               </stages>\n            </pipeline>";
@@ -128,7 +128,8 @@
 
   // ------------------------------------------------------------------ project
   /**
-   * opts: { m, pcb, place, sp (effective stand), lines (tray BOM lines or null), trays ({pk, pl} or null), tp,
+   * opts: { m, pcb, place, sp (effective stand), lines (tray BOM lines or null), trays ({pk, pl} or null),
+   *         opulo ({op: opuloPack result, pl: placeOpulo result} or null; used instead of trays), tp,
    *         ref: {hole, x, y, flipX, flipY} (plate -> machine; without it coordinates stay in the plate frame),
    *         plateZ (machine Z of the plate top), notInTray: 'ignore' | 'place' }
    * Returns { name, files: [{name, text}], notes: [string] }
@@ -183,13 +184,30 @@
           feeders.push({ id: `PLAN-${r.id}`, name: `T${t.num}L${r.lane} #${r.id} ${l.value.split(' / ')[0]}`.slice(0, 60), partId: partIdOf(l),
             tapeType: l.carrier === 'paper' ? 'WhitePaper' : 'BlackPlastic', tapeW: l.tapeW, pitch: l.pitch, z: plateZ + r.z, rot: 0,
             ref: toMachine({ x: x0, y: r.sprocketY }), last: toMachine({ x: Math.max(x0 + 4, x1), y: r.sprocketY }) });
-          if (!parts.has(partIdOf(l))) { // tray line with no placement on this board (e.g. ordered spare part)
-            const info = packageInfo(l.footprint, l.value), pkg = pkgIdOf(l.footprint);
-            if (!pkgs.has(pkg)) pkgs.set(pkg, { id: pkg, desc: l.footprint, w: info.w, h: info.h, tip: info.tip });
-            parts.set(partIdOf(l), { id: partIdOf(l), name: l.value, height: info.height, pkg });
-          }
+          partFor(l);
         }
       });
+    }
+    // Opulo strip feeders: one OpenPnP strip feeder per strip (a line on 2+ strips: PLAN-<line>-<k>)
+    if (o.opulo && o.opulo.op) {
+      o.opulo.op.feeders.forEach((f, i) => {
+        const pl = o.opulo.pl[i];
+        if (!pl || !pl.ok) { notes.push(`Opulo feeder O${f.num} is not placed: no feeders written for it.`); return; }
+        for (const c of TR.opuloCoords(f, pl, o.tp)) {
+          const st = c.s, l = st.line;
+          feeders.push({ id: st.of > 1 ? `PLAN-${st.id}-${st.k}` : `PLAN-${st.id}`, name: `O${f.num}S${c.strip} #${st.id} ${l.value.split(' / ')[0]}`.slice(0, 60), partId: partIdOf(l),
+            tapeType: l.carrier === 'paper' ? 'WhitePaper' : 'BlackPlastic', tapeW: l.tapeW, pitch: l.pitch, z: plateZ + c.z, rot: 0,
+            ref: toMachine(c.ref), last: toMachine(c.last) });
+          partFor(l);
+        }
+      });
+      notes.push('Opulo feeders: the strip positions are ballparks (strips spread evenly across each feeder). Run Auto Setup on every PLAN- feeder.');
+    }
+    function partFor(l) { // fed line with no placement on this board (e.g. ordered spare part)
+      if (parts.has(partIdOf(l))) return;
+      const info = packageInfo(l.footprint, l.value), pkg = pkgIdOf(l.footprint);
+      if (!pkgs.has(pkg)) pkgs.set(pkg, { id: pkg, desc: l.footprint, w: info.w, h: info.h, tip: info.tip });
+      parts.set(partIdOf(l), { id: partIdOf(l), name: l.value, height: info.height, pkg });
     }
     const guessed = [...parts.values()].filter((q) => q.guess).map((q) => q.id);
     if (guessed.length) notes.push(`Part height / body size guessed (check the datasheet): ${guessed.join(', ')}`);
@@ -222,7 +240,7 @@
       `  parts.xml           parts to merge (id = footprint-value, one per BOM line, same as the tray sections).`,
       `  packages.xml        packages to merge (body size, nozzle tip by name from Opulo's set N045 N08 N14 N24 N40 N75;`,
       `                      the merge turns the names into this machine's nozzle tip ids).`,
-      `  feeders.xml         ${feeders.length} ReferenceStripFeeder(s), ids PLAN-<line>, one per tray section.`,
+      `  feeders.xml         ${feeders.length} ReferenceStripFeeder(s), ids PLAN-<line>, one per tray section or Opulo strip (PLAN-<line>-<k> when a line takes k strips).`,
       ``,
       `Merge (OpenPnP must be CLOSED: it rewrites its config when it exits)`,
       `  python merge_into_openpnp.py            -> ~/.openpnp2 (backup made first: *.bak-<time>)`,

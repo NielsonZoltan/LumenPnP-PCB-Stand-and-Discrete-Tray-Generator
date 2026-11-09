@@ -16,7 +16,7 @@
   const S = typeof module !== 'undefined' && module.exports ? require('./pnp_stand_core.js') : root.PnpStand;
   const { distPointRect, rectsOverlap, distSegRect } = S._;
 
-  const VERSION = 2;
+  const VERSION = 3;
 
   // ------------------------------------------------------------------ tray parameters
   const DEFAULT_TRAY = {
@@ -35,11 +35,16 @@
     labelBlock: 4.0,    // solid block at the start of each section, carries the engraved line number
     labelH: 3.0,
     labelDepth: 0.5,
-    nutH: 4.0,          // nut height: caps are at least floor-under-nut + this tall
     maxTrayW: 90,       // widest tray (across the lanes)
     laneLen: 0,         // channel length between the caps; 0 = choose the one using the least plate area
     series: true,       // several sections may share one lane end to end
     gap: 2.0,           // clearance to stands, board, keep-outs and other trays
+    holder: 'tray',     // 'tray' = our printed cut-tape trays, 'opulo' = Opulo LumenPnP strip feeders
+    opTypes: '8:3:40 12:3:56.2 16:2:48 24:1:36 32:1:44', // Opulo feeder per tape width: W:strips:width across[:how many you have]
+    opLen: 120,         // Opulo feeder length (all widths)
+    opUsable: 110,      // tape length per strip that can be picked from (guess: feeder length minus the ends)
+    opOrient: 90,       // 90 = strips run front to back across the plate (bolts like A15 + G15), 180 = along the rows
+    opZ: 8.0,           // tape surface above the plate top (guess: teach it)
   };
 
   // ------------------------------------------------------------------ BOM
@@ -325,7 +330,7 @@
     let c = tp.sideWall;
     const depth = Math.max(...lanes.flatMap((l) => l.sections.map((s) => s.recess + s.groove)));
     const T = tp.base + depth;                                  // tray top
-    const Tc = Math.max(T, sp.pocketFloor + tp.nutH);           // cap top (room for the nut)
+    const Tc = Math.max(T, sp.pocketFloor + (sp.nutH != null ? sp.nutH : tp.nutH || 4)); // cap top (room for the nut; nut height is a stand setting)
     for (const l of lanes) {
       l.c0 = c; l.c1 = c + l.chW; c = l.c1 + tp.rib;
       let a = capW;
@@ -372,16 +377,22 @@
     if (m.P.gap > 0.5 && !m.plates.some((p) => rect.y0 >= p.y0 && rect.y1 <= p.y1)) return { ok: false, rect, why: 'across the gap between plates' };
     const bA = capBolts(m, ko, xA, rect.y0, rect.y1, boltMargin), bB = capBolts(m, ko, xB, rect.y0, rect.y1, boltMargin);
     if (!bA.length || !bB.length) return { ok: false, rect, why: 'no free grid hole under a cap' };
-    const g = tp.gap;
+    const why = blockedWhy(m, ko, rect, obst, tp.gap);
+    if (why) return { ok: false, rect, why };
+    return { ok: true, rect, bolts: [...bA, ...bB], j, y0, xA, xB };
+  }
+
+  /** Why a rect on the plates collides (keep-outs, plate screws, obstacles within gap), or '' if it's free */
+  function blockedWhy(m, ko, rect, obst, g) {
     for (const z of ko.zones.concat(m.screws)) {
       const hit = z.type === 'circle' ? distPointRect(z, rect) < z.r + g : rectsOverlap({ x0: z.x0 - g, y0: z.y0 - g, x1: z.x1 + g, y1: z.y1 + g }, rect);
-      if (hit) return { ok: false, rect, why: `over ${z.label}` };
+      if (hit) return `over ${z.label}`;
     }
-    for (const r of obst.rects) if (rectsOverlap({ x0: r.x0 - g, y0: r.y0 - g, x1: r.x1 + g, y1: r.y1 + g }, rect)) return { ok: false, rect, why: `over ${r.label}` };
+    for (const r of obst.rects) if (rectsOverlap({ x0: r.x0 - g, y0: r.y0 - g, x1: r.x1 + g, y1: r.y1 + g }, rect)) return `over ${r.label}`;
     for (const poly of obst.polys) for (let i = 0; i < poly.pts.length; i++) {
-      if (distSegRect(poly.pts[i], poly.pts[(i + 1) % poly.pts.length], rect) < g) return { ok: false, rect, why: `over ${poly.label}` };
+      if (distSegRect(poly.pts[i], poly.pts[(i + 1) % poly.pts.length], rect) < g) return `over ${poly.label}`;
     }
-    return { ok: true, rect, bolts: [...bA, ...bB], j, y0, xA, xB };
+    return '';
   }
 
   /**
@@ -440,6 +451,151 @@
     return rows;
   }
 
+  // ------------------------------------------------------------------ Opulo LumenPnP strip feeders
+  // opulo.io "LumenPnP Strip Feeder": 8 and 12 mm hold 3 strips, 16 mm 2, 24 / 32 mm 1; all 120 mm long; two M3 screws
+  // into grid holes (e.g. A15 + G15), 90 or 180 deg. Width across the strips: 8 mm 40, 12 mm 56.2 from Opulo's FreeCAD
+  // files (src/FDM/*-strip-feeder.FCStd); 16 / 24 / 32 mm are guesses. The base has a 15 mm hole grid, so any plate holes
+  // under it can take the screws.
+
+  /** "8:3:40 12:3:56.2 ..." -> { 8: {tapeW, strips, across, have}, ... } (have 0 = no limit) */
+  function opuloTypes(text) {
+    const out = {};
+    for (const tok of String(text || '').split(/[\s,;]+/)) {
+      const m = tok.match(/^(\d+):(\d+):(\d+(?:\.\d+)?)(?::(\d+))?$/);
+      if (m) out[+m[1]] = { tapeW: +m[1], strips: +m[2], across: +m[3], have: m[4] ? +m[4] : 0 };
+    }
+    return out;
+  }
+
+  /**
+   * Strips per ticked line (parts = qty x boards + spares; a strip holds floor(usable / pitch) - leader), then strips of
+   * one tape width fill feeders of that width in line order (a line's strips stay together).
+   * Returns { feeders: [{num, tapeW, type, strips:[{id, line, k, of, parts, cap}], len, across}], counts, need, problems }
+   */
+  function opuloPack(lines, tp) {
+    const types = opuloTypes(tp.opTypes), problems = [], strips = [], counts = {};
+    for (const l of lines.filter((x) => x.use)) {
+      const count = Math.ceil(l.qty * tp.boards) + tp.spares;
+      counts[l.id] = count;
+      const t = types[l.tapeW];
+      if (!t) { problems.push(`#${l.id} ${l.value.split(' / ')[0]}: no Opulo feeder type for ${l.tapeW} mm tape (add one to the feeder types)`); continue; }
+      const cap = Math.max(1, Math.floor(tp.opUsable / l.pitch) - tp.leader);
+      const n = Math.max(1, Math.ceil(count / cap));
+      for (let k = 0; k < n; k++) strips.push({ id: l.id, line: l, k: k + 1, of: n, parts: Math.min(cap, count - k * cap), cap, tapeW: l.tapeW });
+    }
+    const feeders = [];
+    for (const W of [...new Set(strips.map((s) => s.tapeW))].sort((a, b) => a - b)) {
+      const t = types[W], list = strips.filter((s) => s.tapeW === W).sort((a, b) => a.id - b.id || a.k - b.k);
+      for (let i = 0; i < list.length; i += t.strips) feeders.push({ tapeW: W, type: t, strips: list.slice(i, i + t.strips), len: tp.opLen, across: t.across });
+    }
+    feeders.forEach((f, i) => { f.index = i; f.num = i + 1; });
+    const need = {};
+    for (const f of feeders) need[f.tapeW] = (need[f.tapeW] || 0) + 1;
+    for (const W of Object.keys(need)) if (types[W].have && need[W] > types[W].have) problems.push(`needs ${need[W]} × ${W} mm feeders, you have ${types[W].have}`);
+    return { opulo: true, feeders, strips, counts, need, types, problems, tp };
+  }
+
+  /** Footprint of one feeder on the plates: dx along the rows (X), dy across (Y) */
+  const opuloDims = (f, tp) => (+tp.opOrient === 180 ? { dx: f.len, dy: f.across } : { dx: f.across, dy: f.len });
+
+  /** One feeder position: centre on row j, low edge y0. Two free grid holes under it, as far apart as possible. */
+  function tryOpulo(m, ko, f, j, y0, obst, tp) {
+    const xs = rowXs(m);
+    if (j < 0 || j >= xs.length) return { ok: false, why: 'off the plates' };
+    const { dx, dy } = opuloDims(f, tp), xc = xs[j];
+    const rect = { x0: xc - dx / 2, x1: xc + dx / 2, y0, y1: y0 + dy };
+    const ex = m.extent;
+    if (rect.x0 < ex.x0 - 1e-6 || rect.x1 > ex.x1 + 1e-6 || rect.y0 < ex.y0 - 1e-6 || rect.y1 > ex.y1 + 1e-6) return { ok: false, rect, why: 'off the plates' };
+    // always on one plate: its two screws go into one plate (A15 + G15 style), never across the seam
+    if (!m.plates.some((p) => rect.y0 >= p.y0 - 1e-6 && rect.y1 <= p.y1 + 1e-6)) return { ok: false, rect, why: 'across two plates' };
+    const why = blockedWhy(m, ko, rect, obst, tp.gap);
+    if (why) return { ok: false, rect, why };
+    // other feeders: only no overlap (ends meet at the plate seam, as in Opulo's own two-plate layout)
+    for (const r of obst.feeders || []) if (rectsOverlap({ x0: r.x0 + 0.01, y0: r.y0 + 0.01, x1: r.x1 - 0.01, y1: r.y1 - 0.01 }, rect)) return { ok: false, rect, why: 'over ' + r.label };
+    const mg = 5; // screw head clear of the feeder's ends and sides
+    const hs = m.holes.filter((h) => h.exists && !ko.blocked.has(h.name) && h.x >= rect.x0 + mg && h.x <= rect.x1 - mg && h.y >= rect.y0 + mg && h.y <= rect.y1 - mg);
+    let best = null;
+    for (let a = 0; a < hs.length; a++) for (let b = a + 1; b < hs.length; b++) {
+      const d = Math.hypot(hs[a].x - hs[b].x, hs[a].y - hs[b].y);
+      // far apart, and on the feeder's centre line when possible (Opulo's own: A15 + G15 for a feeder on row 15)
+      const score = d - 2 * (Math.abs(hs[a].x - xc) + Math.abs(hs[b].x - xc)) / m.P.pitch;
+      if (d >= 30 && (!best || score > best.score)) best = { score, bolts: [hs[a], hs[b]] };
+    }
+    if (!best) return { ok: false, rect, why: 'no two free grid holes under it' };
+    return { ok: true, rect, bolts: best.bolts, j, y0, xc };
+  }
+
+  /** Place feeders one by one nearest the target; fixed: { [num]: {j, y0} } keeps user-moved feeders where they are */
+  function placeOpulo(m, ko, feeders, obst, tp, target, fixed) {
+    const out = new Array(feeders.length).fill(null);
+    const placed = { rects: obst.rects.slice(), polys: obst.polys, feeders: [] };
+    const xs = rowXs(m), ex = m.extent;
+    for (const f of feeders) {
+      const fx = fixed && fixed[f.num];
+      if (!fx) continue;
+      const r = tryOpulo(m, ko, f, fx.j, fx.y0, placed, tp);
+      out[f.index] = { ...r, fixed: true, j: fx.j, y0: fx.y0 };
+      if (r.rect) placed.feeders.push({ ...r.rect, label: 'feeder O' + f.num });
+    }
+    for (const f of feeders) {
+      if (out[f.index]) continue;
+      const { dy } = opuloDims(f, tp);
+      let best = null;
+      for (let j = 0; j < xs.length; j++) {
+        for (let y0 = ex.y0; y0 + dy <= ex.y1 + 1e-9; y0 += 1) {
+          const r = tryOpulo(m, ko, f, j, y0, placed, tp);
+          if (!r.ok) continue;
+          const cy = (r.rect.y0 + r.rect.y1) / 2;
+          const cost = Math.hypot(r.xc - target.x, cy - target.y);
+          if (!best || cost < best.cost) best = { ...r, cost };
+        }
+      }
+      out[f.index] = best || { ok: false, why: 'no free spot on the plates' };
+      if (best) placed.feeders.push({ ...best.rect, label: 'feeder O' + f.num });
+    }
+    return out;
+  }
+
+  /**
+   * Strip ballparks for the setup sheet / OpenPnP (plate frame): strips evenly across the feeder.
+   * 90 deg: strips run along Y, sprocket holes on the left (-X), fed back to front (OpenPnP auto setup wants the holes on
+   * the right of the feed direction). 180 deg: along X, holes toward the front (-Y), fed left to right.
+   */
+  function opuloCoords(f, pos, tp) {
+    const n = f.type.strips, rows = [];
+    f.strips.forEach((s, i) => {
+      const W = s.tapeW, toPocket = pocketFromEdge(W) - 1.75;
+      let r;
+      if (+tp.opOrient === 180) {
+        const c = pos.rect.y0 + ((i + 0.5) * (pos.rect.y1 - pos.rect.y0)) / n, sy = c - W / 2 + 1.75;
+        r = { ref: { x: pos.rect.x0 + 6, y: sy }, last: { x: pos.rect.x1 - 6, y: sy }, first: { x: pos.rect.x0 + 6, y: sy + toPocket } };
+      } else {
+        const c = pos.rect.x0 + ((i + 0.5) * (pos.rect.x1 - pos.rect.x0)) / n, sx = c - W / 2 + 1.75;
+        r = { ref: { x: sx, y: pos.rect.y1 - 6 }, last: { x: sx, y: pos.rect.y0 + 6 }, first: { x: sx + toPocket, y: pos.rect.y1 - 6 } };
+      }
+      rows.push({ ...r, strip: i + 1, s, z: tp.opZ });
+    });
+    return rows;
+  }
+
+  /** Feeder / strip table as CSV */
+  function opuloCsv(lines, op, placements) {
+    const esc = (v) => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const hdr = ['feeder', 'tape W', 'strip', 'line', 'value', 'footprint', 'refs', 'mpn', 'strip k of n', 'parts in strip', 'strip holds', 'pitch', 'carrier', 'bolts', 'first part X', 'first part Y', 'note'];
+    const out = [];
+    for (const f of op.feeders) {
+      const p = placements && placements[f.index];
+      const co = p && p.ok ? opuloCoords(f, p, op.tp) : [];
+      f.strips.forEach((s, i) => {
+        const l = s.line, c = co[i];
+        out.push([`O${f.num}`, f.tapeW, i + 1, l.id, l.value, l.footprint, l.refs.join(' '), l.mpn, `${s.k}/${s.of}`, s.parts, s.cap, l.pitch, l.carrier,
+          p && p.ok ? p.bolts.map((b) => b.name).join(' + ') : 'not placed', c ? c.first.x.toFixed(1) : '', c ? c.first.y.toFixed(1) : '', l.tapeNote].map(esc).join(','));
+      });
+    }
+    for (const l of lines.filter((x) => !x.use)) out.push(['', l.tapeW, '', l.id, l.value, l.footprint, l.refs.join(' '), l.mpn, '', '', '', l.pitch, l.carrier, 'hand place / not in a feeder', '', '', l.tapeNote].map(esc).join(','));
+    return hdr.join(',') + '\n' + out.join('\n') + '\n';
+  }
+
   // ------------------------------------------------------------------ solid
   /** Tray solid in its own frame (origin = tray low corner on the plate). bolts: machine holes, rect: tray rect */
   function traySolid(tray, pos, tp, sp, jscad) {
@@ -492,7 +648,8 @@
     return hdr.join(',') + '\n' + rows.join('\n') + '\n';
   }
 
-  const api = { VERSION, DEFAULT_TRAY, parseCsv, parseBom, linesFromParts, isDigiKeyOrder, applyOrder, valueKey, tapeFor, pocketFromEdge, sectionOf, capOf, pack, plan, rowXs, rowHoles, capBolts, tryTray, placeTrays, sectionCoords, traySolid, sectionsCsv };
+  const api = { VERSION, DEFAULT_TRAY, parseCsv, parseBom, linesFromParts, isDigiKeyOrder, applyOrder, valueKey, tapeFor, pocketFromEdge, sectionOf, capOf, pack, plan, rowXs, rowHoles, capBolts, tryTray, placeTrays, sectionCoords, traySolid, sectionsCsv,
+    blockedWhy, opuloTypes, opuloPack, opuloDims, tryOpulo, placeOpulo, opuloCoords, opuloCsv };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PnpTray = api;
 })(typeof window !== 'undefined' ? window : globalThis);

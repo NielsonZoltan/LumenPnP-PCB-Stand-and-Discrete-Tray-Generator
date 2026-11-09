@@ -47,7 +47,8 @@ if (file) assert(pcb.thickness > 0, `board thickness read from the file (${pcb.t
 assert(Math.abs(sp.pinLen - (sp.pcbThick + sp.pinAbove)) < 1e-9, `pin length = thickness + ${sp.pinAbove} (${sp.pinLen.toFixed(2)} mm)`);
 { // second pass of a double-sided board: 4 mm parts under it
   const e = S.effectiveStand({ ...S.DEFAULT_STAND, underClear: 4, height: 5 });
-  assert(e.stepH === 4.5 && e.height === 7 && e.notes.length === 2, 'under-board clearance raises step-up to 4.5 and height to 7');
+  assert(e.stepH === 4.5 && e.height === 7 && e.notes.filter((n) => /raised/.test(n)).length === 2 && e.notes.some((n) => /sticks out/.test(n)),
+    'under-board clearance raises step-up to 4.5 and height to 7 (and says the nut no longer fits)');
   // flip mirrors u: a hole at the lower-left lands at the lower-right when bottom side up
   const pl = { cx: 100, cy: 60, rot: 0 };
   const a = S.toMachine(pcb, pl, 0, 0), b = S.toMachine(pcb, { ...pl, flip: true }, 0, 0);
@@ -89,6 +90,9 @@ if (res.best) {
       if (inside && v[0][2] < S.bodyTop(sp) - 0.01) topOfFloor = Math.max(topOfFloor, v[0][2]);
     }
     assert(Math.abs(topOfFloor - sp.pocketFloor) < 0.01, `plastic under the nut = ${topOfFloor.toFixed(2)} mm (set ${sp.pocketFloor})`);
+    // nut height: the default 4 mm nut fits the default pocket; a 5 mm nut is reported as sticking out
+    const fits = !sp.notes.some((n) => /sticks out/.test(n)), tall = S.effectiveStand({ ...S.DEFAULT_STAND, nutH: 5 }).notes.some((n) => /sticks out/.test(n));
+    assert(fits && tall && Object.values(S.BOLT_PRESETS).every((b) => b.boltD > 0 && b.nutAF > b.boltD && b.nutH > 0), `nut height checked against the pocket (${sp.nutH} mm fits, 5 mm reported); ${Object.keys(S.BOLT_PRESETS).length} bolt presets`);
   }
   // each stand on its own is a closed mesh (every edge shared by exactly 2 triangles), so the slicer needs no repair
   const perStand = result.stands.map((st) => S.stlBinary(S.printLayout([st], sp, jscad), jscad));
@@ -237,6 +241,36 @@ const O = require('./pnp_openpnp_core.js');
           `fit_fiducials: ${fidIds.length} taught fiducials -> 0.4 deg + shift recovered, ${some} moved with them`);
         assert(/z="16.000"/.test(r.files[Object.keys(asMap).find((n) => n.endsWith('.job.xml'))]), 'fit_fiducials: measured board Z in the job');
       }
+    }
+    // Opulo LumenPnP strip feeders instead of our trays
+    for (const orient of [90, 180]) {
+      const otp = { ...T.DEFAULT_TRAY, holder: 'opulo', opOrient: orient };
+      const op = T.opuloPack(lines, otp);
+      const used = lines.filter((l) => l.use && op.types[l.tapeW]);
+      const stripsOk = used.every((l) => {
+        const st = op.strips.filter((s) => s.id === l.id);
+        return st.reduce((a, s) => a + s.parts, 0) === op.counts[l.id] && st.every((s) => s.parts <= s.cap && s.cap === Math.floor(otp.opUsable / l.pitch) - otp.leader);
+      });
+      assert(stripsOk && op.feeders.every((f) => f.strips.length <= f.type.strips && f.strips.every((s) => s.tapeW === f.tapeW)),
+        `opulo ${orient}°: ${op.strips.length} strips (parts per line add up, none over capacity) in ${op.feeders.length} feeder(s) of one tape width each`);
+      const opl = T.placeOpulo(m, ko, op.feeders, obst, otp, { x: ap.best.place.cx, y: ap.best.place.cy });
+      const okp = opl.filter((p) => p.ok);
+      let overlap = 0;
+      for (let a = 0; a < okp.length; a++) for (let b = a + 1; b < okp.length; b++) {
+        const A = okp[a].rect, B = okp[b].rect;
+        if (A.x0 < B.x1 - 0.01 && B.x0 < A.x1 - 0.01 && A.y0 < B.y1 - 0.01 && B.y0 < A.y1 - 0.01) overlap++;
+      }
+      const onePlate = okp.every((p) => m.plates.some((pl) => p.rect.y0 >= pl.y0 - 1e-6 && p.rect.y1 <= pl.y1 + 1e-6));
+      const boltsOk = okp.every((p) => p.bolts.length === 2 && Math.hypot(p.bolts[0].x - p.bolts[1].x, p.bolts[0].y - p.bolts[1].y) >= 30 &&
+        p.bolts.every((b) => b.x > p.rect.x0 && b.x < p.rect.x1 && b.y > p.rect.y0 && b.y < p.rect.y1));
+      assert(okp.length === op.feeders.length && !overlap && onePlate && boltsOk, `opulo ${orient}°: all ${op.feeders.length} feeders placed, on one plate each, no overlap, 2 grid holes ≥ 30 mm apart under each`);
+      const oprj = O.project({ m, pcb: board, place: ap.best.place, sp: tsp, lines, trays: null, opulo: { op, pl: opl }, tp: otp, ref: null, plateZ: 0, notInTray: 'ignore' });
+      const ids = oprj.feeders.map((f) => f.id);
+      assert(oprj.feeders.length === op.strips.length && new Set(ids).size === ids.length, `opulo ${orient}°: OpenPnP has one strip feeder per strip (${ids.length}, ids unique)`);
+    }
+    {
+      const op = T.opuloPack(lines, { ...T.DEFAULT_TRAY, holder: 'opulo', opTypes: '8:3:40:1' });
+      assert(op.problems.some((x) => /you have 1/.test(x)) || op.feeders.filter((f) => f.tapeW === 8).length <= 1, 'opulo: a shortage against "have" is reported');
     }
     fs.mkdirSync(path.join(outDir, 'openpnp'), { recursive: true });
     for (const f of prj.files) fs.writeFileSync(path.join(outDir, 'openpnp', f.name), f.text);

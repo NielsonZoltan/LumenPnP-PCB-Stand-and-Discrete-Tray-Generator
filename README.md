@@ -12,7 +12,10 @@ Open `pnp_stand.html` in a browser (double-click it; it works offline). Open `pn
    The import line reports what was skipped (e.g. castellations, vias). A board with no mounting holes switches to
    **corner mode**: each stand has a square pad under a board corner and a low L-wall outside its two edges, with a relief
    hole in the wall's inside corner so a sharp board corner seats. Pick which of the 4 corners get a stand.
-3. **Stand**: height, 1 or 2 M3 bolts per stand (with 2, the stand can't swing), hex nut trap or counterbore on top,
+3. **Stand**: height, 1 or 2 bolts per stand (with 2, the stand can't swing). *Bolt size preset* fills the clearance
+   hole, nut (across flats, height) and head diameter: M3 as measured (default), M2 / M2.5 / M3 / M4 ISO; the fields
+   stay editable. The tray caps use the same bolt. If the nut is taller than the pocket (body top − floor under the
+   nut), the placement panel says so. Hex nut trap or counterbore on top,
    printed locating pin or a blind hole for a dowel, screw or insert, max arm length.
    *Step-up* (default 2 mm): the body stops below the PCB and only a boss under the pin, or the corner pad, reaches it.
    That gives the thin pin a wide base to print on and saves material (−20 % on the F28 panel stands).
@@ -46,6 +49,19 @@ Open `pnp_stand.html` in a browser (double-click it; it works offline). Open `pn
    tape surface Z). The print sheet lists which tape goes in which lane.
    Tape width, pitch and carrier (paper / embossed) come from a package table (EIA-481 typical) and can be changed per
    line; ⚠ marks a guess (connectors, switches, packages by body size). Sprocket holes go toward the front of each lane.
+
+   **Holder = Opulo LumenPnP strip feeders** (instead of printing our trays): each ticked line gets as many strips as
+   it needs (a strip holds floor(usable length / pitch) − empty pockets; usable length 110 mm of the 120 mm feeder is a
+   guess), and strips of one tape width fill feeders of that width in line order. *Feeder types* is one entry per tape
+   width, `W:strips:width across[:how many you have]`: default `8:3:40 12:3:56.2 16:2:48 24:1:36 32:1:44` (strips per
+   feeder from opulo.io; 8 / 12 mm widths from Opulo's FreeCAD files, 16 / 24 / 32 mm guessed). With a count you own,
+   e.g. `8:3:40:6`, a shortage is reported. Feeders are placed on the plates like trays (draggable), one plate each,
+   bolted through two grid holes under them, ≥ 30 mm apart (90°: front-to-back strips, A15 + G15 style; 180°: along the
+   rows). The list says which line goes on which feeder / strip and how many parts; *Setup CSV* and the print sheet
+   have the same. The OpenPnP export (section 7) then writes one strip feeder per strip (`PLAN-<line>`, or
+   `PLAN-<line>-<k>` for a line on k strips) at ballpark positions: Auto Setup each one. In OpenPnP's Auto Setup the
+   sprocket holes must be on the right of the feed direction (first part clicked → second): at 90° with the holes on the
+   left, click the part at the back first.
 
 7. **OpenPnP project** (OpenPnP 2.4): a .zip with `<board>.board.xml` (placements from the .kicad_pcb, origin = board
    lower-left, fiducials kept), `<board>.job.xml` (board location from this placement), `parts.xml` / `packages.xml` (one
@@ -88,7 +104,7 @@ in from each corner and are always keep-outs. Edit *Plate dimensions* if a plate
 | `pnp_stand.html` | GUI |
 | `pnp_stand_core.js` | grid, keep-outs, KiCad import, stand assignment, auto-placement, STL/SCAD export (no DOM; Node-testable) |
 | `pnp_openpnp_core.js` | OpenPnP 2.4 board / job / parts / packages / strip feeders + merge script (no DOM; Node-testable) |
-| `pnp_tray_core.js` | BOM grouping, tape table, section/lane/tray packing, tray placement, tray STL (no DOM; Node-testable) |
+| `pnp_tray_core.js` | BOM grouping, tape table, section/lane/tray packing, tray placement, tray STL; Opulo strip-feeder packing and placement (no DOM; Node-testable) |
 | `fit_fiducials.js` | moves an exported OpenPnP project onto the machine from taught fiducials + measured board Z (Node CLI, also a module) |
 | `test_core.js` | `node tools/pnp_stand/test_core.js [board.kicad_pcb] [out_dir] [corner board] [bom.csv]`: grid, stands, trays, closed meshes |
 | `vendor/jscad-modeling.min.js` | [@jscad/modeling](https://github.com/jscad/OpenJSCAD.org) 2.12.5, MIT (`vendor/jscad-LICENSE.txt`); unpkg fallback |
@@ -118,6 +134,8 @@ slots on the plates → OpenPnP starter config. Opulo's strip feeder models are 
 - Tray fit: channel clearance (tape + 0.3), recess depths and the embossed pocket relief (2.6 mm) are first guesses.
   Print one tray and adjust in *Tray dimensions*. Cut tape tends to curl; hold the strip ends down with Kapton if needed.
 - Tape widths / pitches marked ⚠ (FTR connector, PTS810 switch, body-size guesses) need the datasheet tape drawing.
+- Opulo strip feeders: usable strip length (110 mm), the 16 / 24 / 32 mm feeder widths and the tape surface height
+  (8 mm) are guesses; strip positions inside a feeder are spread evenly, not measured. Measure one feeder and set them.
 
 - Corner mode uses the board's bounding-box corners. A board with large corner radii or chamfers sits on the pads but
   doesn't touch the walls exactly at the corner.

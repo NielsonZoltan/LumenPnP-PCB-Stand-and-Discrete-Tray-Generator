@@ -394,6 +394,7 @@
     pocket: 'hex',     // 'hex' nut trap at the top, 'round' counterbore for a screw head, 'none'
     nutAF: 5.34,       // nut across flats as measured (pocketClr is added)
     headD: 5.5,        // M3 socket head
+    nutH: 4.0,         // nut height as measured; the stand pocket and the tray caps must take it
     pocketClr: 0.3,
     pocketFloor: 1.93, // plastic left under the nut / screw head; the pocket fills the body above it
     bolts: 2,          // 1 = can swing about its bolt; 2 = second bolt locks the angle
@@ -421,6 +422,18 @@
   };
 
   /**
+   * Bolt presets for the stand / tray-cap bolts: clearance hole (printed, so ~0.2-0.6 over nominal), nut across flats
+   * and height (ISO 4032), socket head diameter (ISO 4762). The pocket clearance is added on top. "M3 measured" = our nuts.
+   */
+  const BOLT_PRESETS = {
+    m3measured: { label: 'M3 (our nuts, measured)', boltD: 3.6, nutAF: 5.34, nutH: 4.0, headD: 5.5 },
+    m3: { label: 'M3 ISO', boltD: 3.6, nutAF: 5.5, nutH: 2.4, headD: 5.5 },
+    m2: { label: 'M2 ISO', boltD: 2.4, nutAF: 4.0, nutH: 1.6, headD: 3.8 },
+    m25: { label: 'M2.5 ISO', boltD: 3.0, nutAF: 5.0, nutH: 2.0, headD: 4.5 },
+    m4: { label: 'M4 ISO', boltD: 4.6, nutAF: 7.0, nutH: 3.2, headD: 7.0 },
+  };
+
+  /**
    * Stand settings with the derived values filled in: pinLen, cornerLip from the board thickness; stepH raised to
    * clear parts under the board; height raised if the step-up no longer leaves 2.5 mm of body. notes says what moved.
    */
@@ -436,6 +449,10 @@
     if (e.stepH > 0 && e.height < e.stepH + 2.5) {
       e.height = e.stepH + 2.5;
       notes.push(`height raised to ${e.height.toFixed(1)} mm to keep 2.5 mm of body under the step-up`);
+    }
+    if (e.pocket === 'hex' && e.nutH > 0) {
+      const room = bodyTop(e) - e.pocketFloor;
+      if (room < e.nutH - 1e-6) notes.push(`the ${e.nutH} mm nut sticks out ${(e.nutH - room).toFixed(2)} mm above the stand body: lower the floor under the nut, the step-up, or use a thinner nut`);
     }
     e.notes = notes;
     return e;
@@ -1037,10 +1054,10 @@
     return { plateX: p.x, plateY: p.y, x: ref.x + sx * (p.x - h.x), y: ref.y + sy * (p.y - h.y) };
   }
 
-  const VERSION = 4; // bump when the page needs something new from the core (the page checks it)
+  const VERSION = 5; // bump when the page needs something new from the core (the page checks it)
   const api = {
     VERSION,
-    LETTERS, PROFILES, DEFAULT_STAND, effectiveStand, buildMachine, holesNear, findHole, parseKeepouts,
+    LETTERS, PROFILES, DEFAULT_STAND, BOLT_PRESETS, effectiveStand, buildMachine, holesNear, findHole, parseKeepouts,
     parseSexpr, importKicadPcb, rectPcb, toMachine, pcbRect, derived, candidatesFor, evaluate,
     autoPlace, standSolid, printLayout, stlBinary, zipStore, scadSource, boardOrigin,
     CORNERS, mountsOf, numberMounts, cornerParts, standOutline, hullPts, labelFace, bodyTop, pocketDepthOf, digits, fixTjunctions,

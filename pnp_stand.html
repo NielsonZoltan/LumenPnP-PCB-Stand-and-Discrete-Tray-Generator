@@ -126,8 +126,10 @@ td input[type=number] { width: 58px; }
     <label><span>Height: plate → PCB bottom</span><input type="number" id="sp_height" step="0.5"></label>
     <label><span>Bolts per stand</span><select id="sp_bolts"><option value="2">2 (angle locked)</option><option value="1">1 (can swing)</option></select></label>
     <label><span>Top of bolt hole</span><select id="sp_pocket"><option value="hex">hex nut trap</option><option value="round">screw-head counterbore</option><option value="none">plain hole</option></select></label>
+    <label><span>Bolt size preset</span><select id="boltPreset" title="Fills clearance, nut and head sizes (stands and tray caps). Then fine-tune the fields below"><option value="">– pick to fill –</option></select></label>
     <label><span>Bolt clearance ⌀</span><input type="number" id="sp_boltD" step="0.1"></label>
     <label><span>Nut across flats</span><input type="number" id="sp_nutAF" step="0.1"></label>
+    <label><span>Nut height</span><input type="number" id="sp_nutH" step="0.1" min="0" title="Checked against the pocket depth (warns if the nut sticks out); tray caps are floor + this tall"></label>
     <label><span>Head ⌀</span><input type="number" id="sp_headD" step="0.1"></label>
     <label><span>Floor under nut</span><input type="number" id="sp_pocketFloor" step="0.05" min="0.4" title="Plastic left under the nut (or screw head). The pocket fills the body above it, so it is body top − this"></label>
     <label><span>Pocket clearance</span><input type="number" id="sp_pocketClr" step="0.05"></label>
@@ -199,13 +201,22 @@ td input[type=number] { width: 58px; }
   </details>
 
   <details open>
-    <summary>6 · Cut-tape trays</summary>
-    <div class="muted">One section of cut tape per BOM line (grouped by value + footprint like <code>bom_reels.py</code>). Sections share lanes, lanes share trays; trays bolt to the grid like the stands. Drag a tray to move it.</div>
+    <summary>6 · Cut tape: trays or strip feeders</summary>
+    <div class="muted">One BOM line per reel (grouped by value + footprint like <code>bom_reels.py</code>). <b>Our trays</b>: one section per line, sections share lanes, lanes share trays, printed here. <b>Opulo strip feeders</b>: strips per line by tape width, strips fill Opulo LumenPnP feeders (8 / 12 mm hold 3 strips). Drag a tray or feeder to move it.</div>
+    <label><span>Holder</span><select id="tp_holder"><option value="tray">our cut-tape trays (printed here)</option><option value="opulo">Opulo LumenPnP strip feeders</option></select></label>
     <div class="row"><button class="primary" id="openBom" title="KiCad BOM CSV (Qty per board), or a DigiKey order CSV (Qty = what you ordered; needs the .kicad_pcb open)">Open BOM / DigiKey order .csv…</button><input type="file" id="bomFile" accept=".csv" hidden></div>
     <div id="bomInfo" class="muted"></div>
     <label><span>Boards per run</span><input type="number" id="tp_boards" step="1" min="1"></label>
     <label><span>Spare parts per line</span><input type="number" id="tp_spares" step="1" min="0"></label>
     <label><span>Empty pockets at the start</span><input type="number" id="tp_leader" step="1" min="0"></label>
+    <div id="opuloOnly">
+      <label><span>Feeder types</span><input type="text" id="tp_opTypes" title="One per tape width: W:strips:width across[:how many you have]. Opulo: 8 and 12 mm hold 3 strips, 16 mm 2, 24 / 32 mm 1. Widths across for 8 / 12 mm from Opulo's CAD (40, 56.2); 16 / 24 / 32 are guesses. With 'have', the plan reports a shortage"></label>
+      <label><span>Orientation</span><select id="tp_opOrient"><option value="90">90°: strips front → back (bolts like A15 + G15)</option><option value="180">180°: strips along the rows</option></select></label>
+      <label><span>Usable strip length</span><input type="number" id="tp_opUsable" step="1" min="10" title="Tape length per strip you can pick from (feeder is 120 mm; guess 110). A strip holds floor(this / pitch) − empty pockets"></label>
+      <label><span>Feeder length</span><input type="number" id="tp_opLen" step="1"></label>
+      <label><span>Tape surface above plate</span><input type="number" id="tp_opZ" step="0.1" title="Feeder Z for OpenPnP (guess; teach it on the machine)"></label>
+    </div>
+    <div id="trayOnly">
     <label><span>Max tray width</span><input type="number" id="tp_maxTrayW" step="5" min="20"></label>
     <label><span>Lane length (0 = least area)</span><input type="number" id="tp_laneLen" step="15" min="0"></label>
     <label><span>Sections per lane</span><select id="tp_series"><option value="1">several, end to end</option><option value="0">one (one lane per line)</option></select></label>
@@ -220,13 +231,13 @@ td input[type=number] { width: 58px; }
       <label><span>Embossed pocket relief</span><input type="number" id="tp_groove" step="0.1"></label>
       <label><span>Label block length</span><input type="number" id="tp_labelBlock" step="0.5"></label>
       <label><span>Number height / depth</span><span><input type="number" id="tp_labelH" step="0.5"> <input type="number" id="tp_labelDepth" step="0.1"></span></label>
-      <label><span>Nut height (cap = floor + this)</span><input type="number" id="tp_nutH" step="0.1"></label>
       <label><span>Shortest section</span><input type="number" id="tp_minSection" step="1"></label>
       <label><span>Slack at section end</span><input type="number" id="tp_endClr" step="0.5"></label>
-      <label><span>Clearance to other things</span><input type="number" id="tp_gap" step="0.5"></label>
     </details>
-    <div style="overflow-x:auto"><table id="lineTable"><thead><tr><th title="put in a tray">tray</th><th>#</th><th>value</th><th>qty</th><th>parts</th><th>tape</th><th>pitch</th><th>carrier</th></tr></thead><tbody></tbody></table></div>
-    <div class="row"><button class="primary" id="trayPackBtn" title="Repack the sections and auto-place every tray (forgets trays you moved)">Pack + place trays</button><button id="trayZipBtn" title="One STL per tray and sections.csv in a .zip">Trays (.zip)</button><button id="trayCsvBtn">Sections CSV</button></div>
+    </div>
+    <label><span>Clearance to other things</span><input type="number" id="tp_gap" step="0.5"></label>
+    <div style="overflow-x:auto"><table id="lineTable"><thead><tr><th title="in a tray / strip feeder (untick = hand place)">use</th><th>#</th><th>value</th><th>qty</th><th>parts</th><th>tape</th><th>pitch</th><th>carrier</th></tr></thead><tbody></tbody></table></div>
+    <div class="row"><button class="primary" id="trayPackBtn" title="Repack the sections and auto-place every tray (forgets trays you moved)">Pack + place trays</button><button id="trayZipBtn" title="One STL per tray and sections.csv in a .zip">Trays (.zip)</button><button id="trayCsvBtn" title="Which line goes where (sections / feeder strips)">Setup CSV</button></div>
     <div id="trayStatus"></div>
     <div id="trayList" class="out" style="margin-top:6px"></div>
   </details>
@@ -234,7 +245,7 @@ td input[type=number] { width: 58px; }
   <details open>
     <summary>7 · OpenPnP project</summary>
     <div class="muted">Starter files for OpenPnP 2.4: board (placements from the .kicad_pcb, fiducials), job (board location from this placement), parts + packages (one per BOM line), a strip feeder per tray section, and a merge script. Coordinates are ballparks: teach on the machine. Set the reference hole in <i>5 · OpenPnP board location</i> to get machine X/Y.</div>
-    <label><span>Lines not in a tray</span><select id="op_notInTray"><option value="ignore">Ignore (hand place)</option><option value="place">Place (feeder set up on the machine)</option></select></label>
+    <label><span>Lines not in a tray / feeder</span><select id="op_notInTray"><option value="ignore">Ignore (hand place)</option><option value="place">Place (feeder set up on the machine)</option></select></label>
     <label><span>Plate top Z (machine)</span><input type="number" id="op_plateZ" step="0.1" title="Machine Z of the staging plate top; board Z = this + stand height + board thickness, feeder Z = this + tape surface"></label>
     <div class="row"><button class="primary" id="opBtn">OpenPnP project (.zip)</button></div>
     <div id="opNotes" class="muted"></div>
@@ -256,14 +267,14 @@ td input[type=number] { width: 58px; }
 
 <script src="vendor/jscad-modeling.min.js"></script>
 <script>if (!window.jscadModeling) document.write('<script src="https://unpkg.com/@jscad/modeling@2.12.5/dist/jscad-modeling.min.js"><\/script>');</script>
-<script src="pnp_stand_core.js?v=4"></script>
-<script src="pnp_tray_core.js?v=2"></script>
-<script src="pnp_openpnp_core.js?v=1"></script>
+<script src="pnp_stand_core.js?v=5"></script>
+<script src="pnp_tray_core.js?v=3"></script>
+<script src="pnp_openpnp_core.js?v=2"></script>
 <script>
 'use strict';
 const S = window.PnpStand, TR = window.PnpTray, OP = window.PnpOpenPnP;
 // the browser can keep an old copy of the core after an update; say so instead of failing later
-const CORE_VERSION = 4, TRAY_VERSION = 2, OPENPNP_VERSION = 1;
+const CORE_VERSION = 5, TRAY_VERSION = 3, OPENPNP_VERSION = 2;
 if (!S || S.VERSION !== CORE_VERSION || !TR || TR.VERSION !== TRAY_VERSION || !OP || OP.VERSION !== OPENPNP_VERSION) {
   addEventListener('DOMContentLoaded', () => {
     const b = document.createElement('div');
@@ -289,7 +300,7 @@ const state = {
   prefer: 'here',
   snap: 0.5,
   openpnp: { origin: 'bboxLL', hole: '', x: '', y: '', flipX: false, flipY: false },
-  tray: { tp: { ...TR.DEFAULT_TRAY }, bom: null, pos: {}, layout: null },
+  tray: { tp: { ...TR.DEFAULT_TRAY }, bom: null, pos: {}, opos: {}, layout: null },
   op: { notInTray: 'ignore', plateZ: 0 },
 };
 let M = null, KO = null, RES = null, TRAYS = null;
@@ -300,7 +311,7 @@ function loadLocal() {
     if (s && s.cfg) Object.assign(state, s, { sp: { ...S.DEFAULT_STAND, ...s.sp }, tray: mergeTray(s.tray), op: { notInTray: 'ignore', plateZ: 0, ...(s.op || {}) } });
   } catch (e) { /* storage unavailable */ }
 }
-function mergeTray(t) { return { bom: null, pos: {}, layout: null, ...(t || {}), tp: { ...TR.DEFAULT_TRAY, ...((t && t.tp) || {}) } }; }
+function mergeTray(t) { return { bom: null, pos: {}, opos: {}, layout: null, ...(t || {}), tp: { ...TR.DEFAULT_TRAY, ...((t && t.tp) || {}) } }; }
 function saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ } }
 
 // ------------------------------------------------------------ machine form
@@ -366,11 +377,23 @@ function reparseKeepouts() {
 }
 
 // ------------------------------------------------------------ stand form
-const SP_KEYS = ['height', 'bolts', 'pocket', 'boltD', 'nutAF', 'headD', 'pocketFloor', 'pocketClr', 'iface', 'underClear', 'stepH', 'bossD', 'pinClr', 'pinAbove', 'ifaceHoleD', 'ifaceHoleDepth', 'wall', 'padMin', 'maxArm', 'maxPair', 'underPenalty', 'standGap',
+const SP_KEYS = ['height', 'bolts', 'pocket', 'boltD', 'nutAF', 'nutH', 'headD', 'pocketFloor', 'pocketClr', 'iface', 'underClear', 'stepH', 'bossD', 'pinClr', 'pinAbove', 'ifaceHoleD', 'ifaceHoleDepth', 'wall', 'padMin', 'maxArm', 'maxPair', 'underPenalty', 'standGap',
   'label', 'labelH', 'labelDepth', 'cornerPad', 'cornerGap', 'cornerWall', 'lipBelow', 'pcbThick'];
 /** stand settings with board-derived values (pin length, wall height, raised step-up for clearance) */
 const ES = () => S.effectiveStand(state.sp);
 function standFormFromState() { SP_KEYS.forEach((k) => { $('sp_' + k).value = k === 'label' ? (state.sp.label ? '1' : '0') : state.sp[k]; }); }
+// bolt presets fill the bolt fields (stands and tray caps share them)
+for (const [k, b] of Object.entries(S.BOLT_PRESETS)) {
+  const o = document.createElement('option'); o.value = k;
+  o.textContent = `${b.label}: hole ${b.boltD}, nut ${b.nutAF} AF × ${b.nutH}, head ${b.headD}`;
+  $('boltPreset').appendChild(o);
+}
+$('boltPreset').addEventListener('change', (e) => {
+  const b = S.BOLT_PRESETS[e.target.value];
+  if (!b) return;
+  Object.assign(state.sp, { boltD: b.boltD, nutAF: b.nutAF, nutH: b.nutH, headD: b.headD });
+  standFormFromState(); e.target.value = ''; repackSoon(); update();
+});
 $('spReset').onclick = () => { state.sp = { ...S.DEFAULT_STAND, pcbThick: state.sp.pcbThick }; standFormFromState(); update(); };
 SP_KEYS.forEach((k) => $('sp_' + k).addEventListener('input', (e) => {
   if (k === 'label') { state.sp.label = e.target.value === '1'; update(); return; }
@@ -661,6 +684,7 @@ $('refineBtn').onclick = () => runAuto(true);
 // ------------------------------------------------------------ pointer: pan / zoom / drag board / block holes
 function toUser(e) { const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; const q = pt.matrixTransform(svg.getScreenCTM().inverse()); return { x: q.x, y: q.y }; }
 let drag = null;
+const posMap = () => (TRAYS && TRAYS.op ? state.tray.opos : state.tray.pos); // where dragged trays / feeders are kept
 svg.addEventListener('pointerdown', (e) => {
   e.preventDefault(); // no text selection while dragging
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -668,7 +692,7 @@ svg.addEventListener('pointerdown', (e) => {
   const onTray = e.target.closest && e.target.closest('[data-tray]');
   const onPcb = !onTray && e.target.closest && e.target.closest('#pcbGroup');
   const tnum = onTray ? +onTray.dataset.tray : 0;
-  drag = { mode: onTray ? 'tray' : onPcb ? 'pcb' : 'pan', tnum, tpos0: tnum ? { ...(state.tray.pos[tnum] || {}) } : null, start: u, sx: e.clientX, sy: e.clientY, place0: { ...state.place }, vb0: { ...vb }, moved: false, target: e.target };
+  drag = { mode: onTray ? 'tray' : onPcb ? 'pcb' : 'pan', tnum, tpos0: tnum ? { ...(posMap()[tnum] || {}) } : null, start: u, sx: e.clientX, sy: e.clientY, place0: { ...state.place }, vb0: { ...vb }, moved: false, target: e.target };
   svg.setPointerCapture(e.pointerId);
   svg.classList.add('dragging');
 });
@@ -680,8 +704,8 @@ svg.addEventListener('pointermove', (e) => {
     const u = toUser(e), p0 = drag.tpos0;
     if (p0.j === undefined) return;
     const j = p0.j + Math.round((u.x - drag.start.x) / M.P.pitch), y0 = p0.y0 + Math.round(-(u.y - drag.start.y));
-    const cur = state.tray.pos[drag.tnum];
-    if (!cur || cur.j !== j || cur.y0 !== y0) { state.tray.pos[drag.tnum] = { j, y0 }; update(); }
+    const cur = posMap()[drag.tnum];
+    if (!cur || cur.j !== j || cur.y0 !== y0) { posMap()[drag.tnum] = { j, y0 }; update(); }
   } else if (drag.mode === 'pcb') {
     const u = toUser(e);
     let cx = drag.place0.cx + (u.x - drag.start.x), cy = drag.place0.cy - (u.y - drag.start.y);
@@ -777,6 +801,7 @@ $('printBtn').onclick = () => {
   window.print();
 };
 function traySheet() {
+  if (TRAYS && TRAYS.op) return opuloSheet();
   if (!TRAYS || !TRAYS.pk.trays.length) return '';
   const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;');
   const where = new Map();
@@ -791,6 +816,18 @@ function traySheet() {
     <table><thead><tr><th>#</th><th>Value</th><th>Footprint</th><th>Parts</th><th>Tape</th><th>Cut length</th><th>Tray / lane</th></tr></thead><tbody>${rows}</tbody></table>` +
     (hand ? `<p>Not in a tray: ${hand}</p>` : '');
 }
+function opuloSheet() {
+  const { op, pl } = TRAYS;
+  if (!op.feeders.length) return '';
+  const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const rows = op.feeders.flatMap((f, i) => f.strips.map((st, k) => `<tr><td><b>O${f.num}</b> S${k + 1}</td><td>${f.tapeW} mm</td><td><b>${st.id}</b></td><td>${esc(st.line.value)}</td><td>${esc(fpShort(st.line.footprint))}</td><td>${st.parts}${st.of > 1 ? ` (${st.k}/${st.of})` : ''}</td><td>${st.line.pitch} mm ${st.line.carrier}</td><td>${pl[i] && pl[i].ok ? pl[i].bolts.map((b) => b.name).join(' + ') : 'not placed'}</td></tr>`)).join('');
+  const need = Object.entries(op.need).map(([W, n]) => `${n} × ${W} mm`).join(', ');
+  const hand = state.tray.bom.lines.filter((l) => !l.use).map((l) => `${l.id} ${esc(l.value)} (${l.refs.join(' ')})`).join(', ');
+  const dir = +state.tray.tp.opOrient === 180 ? 'strips along the rows, sprocket holes toward the front, first part at the left end' : 'strips front to back, sprocket holes on the left, first part at the back end';
+  return `<h3>Opulo strip feeders (${state.tray.tp.boards} board(s) per run): ${need}</h3><p>S1 = the strip at the feeder's left / front. ${dir} (OpenPnP auto setup: click the first part, then the next one toward the end).</p>
+    <table><thead><tr><th>Feeder / strip</th><th>Tape</th><th>#</th><th>Value</th><th>Footprint</th><th>Parts</th><th>Pitch</th><th>Bolts</th></tr></thead><tbody>${rows}</tbody></table>` +
+    (hand ? `<p>Hand place: ${hand}</p>` : '');
+}
 $('saveBtn').onclick = () => download(`${baseName()}_stands.json`, JSON.stringify(state, null, 1), 'application/json');
 $('loadBtn').onclick = () => $('loadFile').click();
 $('loadFile').addEventListener('change', async (e) => {
@@ -803,15 +840,24 @@ $('loadFile').addEventListener('change', async (e) => {
 });
 
 // ------------------------------------------------------------ cut-tape trays
-const TP_KEYS = ['boards', 'spares', 'leader', 'maxTrayW', 'laneLen', 'series', 'chClr', 'rib', 'sideWall', 'base', 'recessPaper', 'recessEmb', 'groove',
-  'labelBlock', 'labelH', 'labelDepth', 'nutH', 'minSection', 'endClr', 'gap'];
-function trayFormFromState() { TP_KEYS.forEach((k) => { $('tp_' + k).value = k === 'series' ? (state.tray.tp.series ? '1' : '0') : state.tray.tp[k]; }); }
+const TP_KEYS = ['holder', 'boards', 'spares', 'leader', 'maxTrayW', 'laneLen', 'series', 'chClr', 'rib', 'sideWall', 'base', 'recessPaper', 'recessEmb', 'groove',
+  'labelBlock', 'labelH', 'labelDepth', 'minSection', 'endClr', 'gap', 'opTypes', 'opOrient', 'opUsable', 'opLen', 'opZ'];
+const TP_TEXT = ['holder', 'opTypes'];
+const isOpulo = () => state.tray.tp.holder === 'opulo';
+function holderVis() {
+  $('opuloOnly').style.display = isOpulo() ? '' : 'none';
+  $('trayOnly').style.display = isOpulo() ? 'none' : '';
+  $('trayZipBtn').style.display = isOpulo() ? 'none' : '';
+  $('trayPackBtn').textContent = isOpulo() ? 'Pack + place feeders' : 'Pack + place trays';
+}
+function trayFormFromState() { TP_KEYS.forEach((k) => { $('tp_' + k).value = k === 'series' ? (state.tray.tp.series ? '1' : '0') : state.tray.tp[k]; }); holderVis(); }
 let trayTimer = 0;
 const repackSoon = () => { clearTimeout(trayTimer); trayTimer = setTimeout(() => { repackTrays(true); update(); }, 250); };
 TP_KEYS.forEach((k) => $('tp_' + k).addEventListener('input', (e) => {
-  const v = k === 'series' ? e.target.value === '1' : +e.target.value;
+  const v = k === 'series' ? e.target.value === '1' : TP_TEXT.includes(k) ? e.target.value : +e.target.value;
   if (typeof v === 'number' && (!isFinite(v) || e.target.value === '')) return;
   state.tray.tp[k] = v;
+  if (k === 'holder') holderVis();
   repackSoon();
 }));
 const fpShort = (fp) => fp.replace(/_\d+Metric$/, '').replace(/^(Package_|Oscillator_SMD_)/, '').slice(0, 22);
@@ -826,12 +872,12 @@ function lineTable() {
   if (!b) return;
   const pk = TRAYS && TRAYS.pk;
   for (const l of b.lines) {
-    const s = pk && pk.sections.find((x) => x.id === l.id);
+    const s = pk && pk.sections.find((x) => x.id === l.id), cnt = TRAYS && TRAYS.op ? TRAYS.op.counts[l.id] : s ? s.count : null;
     const tr = document.createElement('tr');
     tr.title = `${l.refs.join(' ')}\n${l.footprint}${l.mpn ? '\n' + l.mpn : ''}${l.tapeNote ? '\nTape: ' + l.tapeNote : ''}`;
     tr.innerHTML = `<td><input type="checkbox" data-k="use" ${l.use ? 'checked' : ''}></td><td><b>${l.id}</b></td>
       <td>${l.value.split(' / ')[0].slice(0, 16)}<div class="muted" style="font-size:11px">${fpShort(l.footprint)}${l.tapeNote ? ' <span style="color:var(--warn)">⚠</span>' : ''}</div></td>
-      <td>${l.qty}</td><td>${s ? s.count : '–'}</td>
+      <td>${l.qty}</td><td>${cnt != null ? cnt : '–'}</td>
       <td><select data-k="tapeW">${[8, 12, 16, 24, 32, 44].map((w) => `<option ${w === l.tapeW ? 'selected' : ''}>${w}</option>`).join('')}</select></td>
       <td><select data-k="pitch">${[2, 4, 8, 12, 16, 20, 24].map((w) => `<option ${w === l.pitch ? 'selected' : ''}>${w}</option>`).join('')}</select></td>
       <td><select data-k="carrier"><option value="paper" ${l.carrier === 'paper' ? 'selected' : ''}>paper</option><option value="embossed" ${l.carrier === 'embossed' ? 'selected' : ''}>emb.</option></select></td>`;
@@ -880,6 +926,13 @@ const trayTarget = () => state.pcb ? { x: state.place.cx, y: state.place.cy } : 
 function repackTrays(fresh) {
   const b = state.tray.bom, tp = state.tray.tp;
   if (!b || !M) { TRAYS = null; return; }
+  if (isOpulo()) {
+    // Opulo feeders: packing is cheap and deterministic, so always repack; positions kept unless fresh
+    if (fresh) state.tray.opos = {};
+    TRAYS = { op: TR.opuloPack(b.lines, tp), pl: [] };
+    placeTraysNow();
+    return;
+  }
   if (!fresh) {
     const pk = TR.pack(b.lines, { ...tp, ...(state.tray.layout || {}) }, ES(), M);
     const known = pk.trays.length && pk.trays.every((t) => state.tray.pos[t.num]) && Object.keys(state.tray.pos).length === pk.trays.length;
@@ -894,6 +947,12 @@ function repackTrays(fresh) {
 /** Place: trays with a stored position are checked there, the others are searched for (and then stored) */
 function placeTraysNow() {
   if (!TRAYS) return;
+  if (TRAYS.op) {
+    const pl = TR.placeOpulo(M, KO, TRAYS.op.feeders, trayObstacles(), state.tray.tp, trayTarget(), state.tray.opos);
+    TRAYS.op.feeders.forEach((f, i) => { if (!state.tray.opos[f.num] && pl[i] && pl[i].ok) state.tray.opos[f.num] = { j: pl[i].j, y0: pl[i].y0 }; });
+    TRAYS.pl = pl;
+    return;
+  }
   const pl = TR.placeTrays(M, KO, TRAYS.pk.trays, trayObstacles(), state.tray.tp, ES(), trayTarget(), state.tray.pos);
   TRAYS.pk.trays.forEach((t, i) => { if (!state.tray.pos[t.num] && pl[i] && pl[i].ok) state.tray.pos[t.num] = { j: pl[i].j, y0: pl[i].y0 }; });
   TRAYS.pl = pl;
@@ -901,6 +960,7 @@ function placeTraysNow() {
 function refreshTrays() {
   if (!TRAYS) { $('trayStatus').innerHTML = ''; $('trayList').textContent = ''; return; }
   placeTraysNow();
+  if (TRAYS.op) return refreshOpulo();
   const { pk, pl } = TRAYS;
   const bad = pl.filter((p) => !p || !p.ok).length;
   $('trayStatus').innerHTML = (pk.problems.length ? `<div class="err">${pk.problems.map((x) => '• ' + x).join('\n')}</div>` : '') +
@@ -914,8 +974,47 @@ function refreshTrays() {
     return head + '\n' + lanes;
   }).join('\n\n');
 }
+function refreshOpulo() {
+  const { op, pl } = TRAYS, bad = pl.filter((p) => !p || !p.ok).length;
+  const need = Object.entries(op.need).map(([W, n]) => `${n} × ${W} mm${op.types[W] && op.types[W].have ? ' (have ' + op.types[W].have + ')' : ''}`).join(', ');
+  $('trayStatus').innerHTML = (op.problems.length ? `<div class="err">${op.problems.map((x) => '• ' + x).join('\n')}</div>` : '') +
+    (op.feeders.length ? (bad ? `<div class="err">✗ ${bad} of ${op.feeders.length} feeder(s) don't fit where they are: drag them or press Pack + place</div>` : `<span class="okc">✓ ${op.strips.length} strips in ${op.feeders.length} Opulo feeder(s): ${need}</span>`) : '');
+  const hand = state.tray.bom.lines.filter((l) => !l.use).map((l) => `#${l.id} ${l.value.split(' / ')[0]}`).join(', ');
+  $('trayList').textContent = op.feeders.map((f, i) => {
+    const p = pl[i];
+    return `O${f.num}  ${f.tapeW} mm feeder, ${f.strips.length}/${f.type.strips} strips` + (p && p.ok ? `, bolts ${p.bolts.map((b) => b.name).join(' + ')}` : `  ✗ ${p ? p.why : 'not placed'}`) + '\n' +
+      f.strips.map((st, k) => `  S${k + 1}  #${st.id} ${st.line.value.split(' / ')[0].slice(0, 18)}${st.of > 1 ? ` (strip ${st.k} of ${st.of})` : ''}: ${st.parts} parts (strip holds ${st.cap}, ${st.line.pitch} mm pitch)`).join('\n');
+  }).join('\n\n') + (hand ? `\n\nHand place / not in a feeder: ${hand}` : '');
+}
+function drawOpulo(g) {
+  const { op, pl } = TRAYS, tp = state.tray.tp;
+  op.feeders.forEach((f, i) => {
+    const p = pl[i];
+    if (!p || !p.rect) return;
+    const r = p.rect, grp = el('g', { 'data-tray': f.num, style: 'cursor: move' }, g);
+    el('title', {}, grp).textContent = `Opulo feeder O${f.num} (${f.tapeW} mm)` + (p.ok ? '' : ': ' + p.why);
+    el('rect', { x: r.x0, y: sy(r.y1), width: r.x1 - r.x0, height: r.y1 - r.y0, fill: css('--tray'), stroke: p.ok ? css('--tray-edge') : css('--bad'), 'stroke-width': p.ok ? 0.5 : 1.2 }, grp);
+    const n = f.type.strips, along180 = +tp.opOrient === 180;
+    f.strips.forEach((st, k) => {
+      const w = st.tapeW;
+      const c = along180 ? r.y0 + ((k + 0.5) * (r.y1 - r.y0)) / n : r.x0 + ((k + 0.5) * (r.x1 - r.x0)) / n;
+      const lane = along180 ? { x: r.x0 + 3, y: sy(c + w / 2), width: r.x1 - r.x0 - 6, height: w } : { x: c - w / 2, y: sy(r.y1 - 3), width: w, height: r.y1 - r.y0 - 6 };
+      el('rect', { ...lane, fill: css('--tray-lane'), stroke: 'none' }, grp);
+      const tx = el('text', { x: along180 ? r.x0 + 8 : c, y: along180 ? sy(c) + 1.4 : sy(r.y1 - 10), 'font-size': Math.min(4, w * 0.45), 'text-anchor': 'middle', 'font-weight': 700, fill: css('--tray-edge'), 'pointer-events': 'none' }, grp);
+      tx.textContent = st.id;
+    });
+    const tt = el('text', { x: r.x0 + 1, y: sy(r.y0) - 1.5, 'font-size': 4.5, fill: css('--tray-edge'), 'font-weight': 700, 'pointer-events': 'none' }, grp);
+    tt.textContent = 'O' + f.num;
+    if (p.bolts) for (const b of p.bolts) {
+      el('circle', { cx: b.x, cy: sy(b.y), r: 2.5, fill: 'none', stroke: css('--tray-edge'), 'stroke-width': 0.4, 'pointer-events': 'none' }, grp);
+      const bt = el('text', { x: b.x, y: sy(b.y) + 1.3, 'font-size': 3.2, 'text-anchor': 'middle', fill: css('--tray-edge'), 'pointer-events': 'none' }, grp);
+      bt.textContent = b.name;
+    }
+  });
+}
 function drawTrays(g) {
   if (!TRAYS) return;
+  if (TRAYS.op) return drawOpulo(g);
   TRAYS.pk.trays.forEach((t, i) => {
     const p = TRAYS.pl[i];
     if (!p || !p.rect) return;
@@ -940,11 +1039,12 @@ $('trayPackBtn').onclick = () => {
   if (!state.tray.bom) return setStatus('Open a BOM first', 'bad');
   const t0 = performance.now();
   repackTrays(true); lineTable(); update();
-  setStatus(`✓ trays packed and placed (${Math.round(performance.now() - t0)} ms)`, 'ok');
+  setStatus(`✓ ${isOpulo() ? 'feeders' : 'trays'} packed and placed (${Math.round(performance.now() - t0)} ms)`, 'ok');
 };
 const bomBase = () => (state.tray.bom ? state.tray.bom.name : baseName()).replace(/[^\w.-]+/g, '_');
 $('trayCsvBtn').onclick = () => {
   if (!TRAYS) return setStatus('Open a BOM first', 'bad');
+  if (TRAYS.op) return download(`${bomBase()}_opulo_feeders.csv`, TR.opuloCsv(state.tray.bom.lines, TRAYS.op, TRAYS.pl), 'text/csv');
   download(`${bomBase()}_tray_sections.csv`, TR.sectionsCsv(state.tray.bom.lines, TRAYS.pk, TRAYS.pl), 'text/csv');
 };
 $('trayZipBtn').onclick = () => {
@@ -978,7 +1078,7 @@ function openpnpProject() {
   const o = state.openpnp;
   return OP.project({
     m: M, pcb: state.pcb, place: state.place, sp: ES(), lines: state.tray.bom ? state.tray.bom.lines : null,
-    trays: TRAYS ? { pk: TRAYS.pk, pl: TRAYS.pl } : null, tp: state.tray.tp,
+    trays: TRAYS && TRAYS.pk ? { pk: TRAYS.pk, pl: TRAYS.pl } : null, opulo: TRAYS && TRAYS.op ? { op: TRAYS.op, pl: TRAYS.pl } : null, tp: state.tray.tp,
     ref: o.hole ? { hole: o.hole, x: +o.x || 0, y: +o.y || 0, flipX: o.flipX, flipY: o.flipY } : null,
     plateZ: state.op.plateZ, notInTray: state.op.notInTray,
   });
