@@ -15,7 +15,7 @@
 // Also loads in the page (pnp_stand.html, window.PnpFit), which runs the same fit on the OpenPnP export.
 (function (root) {
 'use strict';
-const VERSION = 1;
+const VERSION = 2;
 
 /** least-squares rotation + shift taking points P onto Q (2D, no scale) */
 function fitRigid(P, Q) {
@@ -91,6 +91,15 @@ function fitProject(files, taught, opts = {}) {
       })
       .replace(/(<feeder class="org\.openpnp\.machine\.reference\.feeder\.ReferenceStripFeeder"[^>]*>\s*<location units="Millimeters" x="[-\d.]+" y="[-\d.]+" z=")([-\d.]+)/g, (all, a, fz) => a + (+fz + dz).toFixed(3));
   }
+  if (files['README.txt']) {
+    // the generated README describes the export before the fit: say what the files are now
+    const worst = Math.max(...fit.residuals);
+    out['README.txt'] = files['README.txt']
+      .replace(/PLATE FRAME \(no reference hole was set\), not machine coordinates\./, `MACHINE coordinates: fitted to ${ids.length} taught fiducials (rotation ${fit.deg.toFixed(3)} deg, worst residual ${worst.toFixed(3)} mm).`)
+      .replace(/Machine coordinates via the reference hole\./, `MACHINE coordinates: reference hole, then fitted to ${ids.length} taught fiducials (worst residual ${worst.toFixed(3)} mm).`)
+      .replace(/(one board location: \w+ side, X [-\d.]+ Y [-\d.]+ Z )[-\d.]+/, (all, a) => a + z.toFixed(2) + (opts.z != null ? ' (measured)' : ''))
+      .replace(/\n  - No reference hole set[^\n]*/, '');
+  }
   return { files: out, fit, job: { board: boardName, x: B.x, y: B.y, z } };
 }
 
@@ -114,7 +123,7 @@ if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.m
     process.exit(2);
   }
   const [inDir, outDir] = pos;
-  const files = Object.fromEntries(fs.readdirSync(inDir).filter((f) => /\.(xml)$/.test(f)).map((f) => [f, fs.readFileSync(path.join(inDir, f), 'utf8')]));
+  const files = Object.fromEntries(fs.readdirSync(inDir).filter((f) => /\.(xml|txt)$/.test(f)).map((f) => [f, fs.readFileSync(path.join(inDir, f), 'utf8')]));
   const r = fitProject(files, taught, opts);
   console.log(`rotation ${r.fit.deg.toFixed(3)} deg, shift ${r.fit.t[0].toFixed(3)}, ${r.fit.t[1].toFixed(3)} mm (board frame); board Z ${r.job.z.toFixed(3)}`);
   r.fit.ids.forEach((id, i) => console.log(`  ${id} residual ${r.fit.residuals[i].toFixed(3)} mm${r.fit.residuals[i] > 0.2 ? '  <- check this one' : ''}`));

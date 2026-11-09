@@ -92,6 +92,8 @@ td input[type=number] { width: 58px; }
   <h1>LumenPnP stand generator</h1>
   <p class="sub">Stands, cut-tape holders and an OpenPnP starter for the LumenPnP staging plates.<span class="info" tabindex="0" data-tip="Work top to bottom: machine, board, stands, placement, then cut tape (our printed trays or Opulo tray feeders) and the OpenPnP project. Hover an <b>i</b> for details. Everything is saved in this browser; <i>Save project</i> moves it to another computer.">i</span></p>
   <div class="chips" id="chips"></div>
+  <div class="row" style="align-items:center"><button id="saveBtn">Save project file</button><button id="loadBtn">Open project file</button><input type="file" id="loadFile" accept=".json" hidden><span class="info" tabindex="0" data-tip="<b>This browser</b> keeps every board’s layout on its own (board, stands, BOM, trays / feeders, machine position, taught fiducials), saved as you go: pick one under <i>saved boards</i>, and opening a .kicad_pcb you laid out before offers its layout back. <b>Project file</b> (.json): the same thing as a file, to move to another computer or keep next to the board in the repo (e.g. <code>hardware/monk/openpnp/monk_panel_project.json</code>).">i</span></div>
+  <select id="recentSel" style="max-width:100%;margin-bottom:6px"></select>
 
   <details open>
     <summary>1 · Machine</summary>
@@ -200,7 +202,6 @@ td input[type=number] { width: 58px; }
       <button id="printBtn">Print sheet</button>
     </div>
     <div class="row" id="perStand"></div>
-    <div class="row"><button id="saveBtn">Save project</button><button id="loadBtn">Load project</button><input type="file" id="loadFile" accept=".json" hidden></div>
   </details>
 
   <details open>
@@ -294,18 +295,17 @@ td input[type=number] { width: 58px; }
 <script src="pnp_stand_core.js?v=5"></script>
 <script src="pnp_tray_core.js?v=5"></script>
 <script src="pnp_openpnp_core.js?v=3"></script>
-<script src="fit_fiducials.js?v=1"></script>
+<script src="fit_fiducials.js?v=2"></script>
 <script>
 'use strict';
 // ------------------------------------------------------------------------------------------------ UI to-dos
 // Ranked by how much they'd save on a real run. Each is independent.
 // DONE 2026-11-09: ui-1 (part) taught fiducials / reference hole / plate choice in section 7 with the fit in the page and
 //   an export that refuses to go out in plate coordinates silently; ui-2 Export everything; ui-4 (part) "where" column;
-//   ui-5 status chips; long help moved behind i icons.
+//   ui-5 status chips; long help moved behind i icons; ui-3 one saved layout per board + recent boards + project file
+//   format (app / format / saved), restore offered when a laid-out board is opened again.
 // TODO(ui-1) Rest of it: keep the machine position (fiducials, board Z, plate Z, reference hole) per machine + board
 //   layout, so another board on the same stands reuses it; show the fit's machine X/Y of each feeder in the list.
-// TODO(ui-3) Per-board saved state: localStorage holds one layout; key it by board name and list recent boards, so
-//   opening another board doesn't overwrite the panel layout (the taught fiducials depend on that layout).
 // TODO(ui-4) Rest of it: hover / click a line to highlight its section on the plates (and section -> row); bulk untick by
 //   kind (connectors, QFP / BGA, switches).
 // TODO(ui-6) Hide expert fields by default (stand pin / boss / corner-mode details, tray wall dimensions) behind
@@ -321,7 +321,7 @@ td input[type=number] { width: 58px; }
 // TODO(ui-12) Sidebar is 360 px: on a small laptop the line table scrolls sideways; let the sidebar be dragged wider.
 const S = window.PnpStand, TR = window.PnpTray, OP = window.PnpOpenPnP, FIT = window.PnpFit;
 // the browser can keep an old copy of the core after an update; say so instead of failing later
-const CORE_VERSION = 5, TRAY_VERSION = 5, OPENPNP_VERSION = 3, FIT_VERSION = 1;
+const CORE_VERSION = 5, TRAY_VERSION = 5, OPENPNP_VERSION = 3, FIT_VERSION = 2;
 if (!S || S.VERSION !== CORE_VERSION || !TR || TR.VERSION !== TRAY_VERSION || !OP || OP.VERSION !== OPENPNP_VERSION || !FIT || FIT.VERSION !== FIT_VERSION) {
   addEventListener('DOMContentLoaded', () => {
     const b = document.createElement('div');
@@ -359,7 +359,7 @@ function loadLocal() {
   } catch (e) { /* storage unavailable */ }
 }
 function mergeTray(t) { return { bom: null, pos: {}, opos: {}, layout: null, ...(t || {}), tp: { ...TR.DEFAULT_TRAY, ...((t && t.tp) || {}) } }; }
-function saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ } }
+function saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ } if (typeof saveBoardSlot === 'function') saveBoardSlot(); }
 
 // ------------------------------------------------------------ machine form
 function buildProfileSelect() {
@@ -452,6 +452,17 @@ SP_KEYS.forEach((k) => $('sp_' + k).addEventListener('input', (e) => {
 
 // ------------------------------------------------------------ PCB
 function setPcb(pcb, center) {
+  if (state.pcb && state.pcb.name !== pcb.name) {
+    // another board: its BOM, tray / feeder positions and taught fiducials don't carry over (the old board keeps them
+    // in its saved slot, written here before anything changes); machine, stand and tray settings do
+    saveBoardSlot();
+    state.pcb = pcb; // from here on, saves go to the new board's slot
+    state.tray = { ...state.tray, bom: null, pos: {}, opos: {}, layout: null };
+    state.op = { ...state.op, fids: {}, boardZ: '' };
+    state.openpnp = { ...state.openpnp, hole: '', x: '', y: '' };
+    TRAYS = null;
+    initForms(); lineTable();
+  }
   state.pcb = pcb;
   if (center) {
     const ex = M.extent;
@@ -509,6 +520,11 @@ $('pcbFile').addEventListener('change', async (e) => {
   if (!f) return;
   try {
     const pcb = S.importKicadPcb(await f.text(), f.name.replace(/\.kicad_pcb$/, ''), { minDrill: +$('minDrill').value || 1 });
+    const saved = (!state.pcb || state.pcb.name !== pcb.name) && loadBoardSlot(pcb.name);
+    if (saved && confirm(`${pcb.name} was laid out here before (stands, BOM, feeders, machine position).\n\nOK = restore that layout with this file's board · Cancel = start fresh`)) {
+      saveBoardSlot(); applyState(saved, pcb); setStatus(`✓ ${pcb.name}: saved layout restored`, 'ok'); return;
+    }
+    if (state.pcb && state.pcb.name !== pcb.name) saveBoardSlot(); // keep the previous board's layout
     setPcb(pcb, true);
     if (pcb.mode === 'corners') setStatus('No mounting holes on this board: switched to corner stands (see "2 · PCB")', 'bad');
   } catch (err) { setStatus('Import failed: ' + err.message, 'bad'); }
@@ -876,14 +892,62 @@ function opuloSheet() {
     <table><thead><tr><th>Feeder / channel</th><th>Tape</th><th>#</th><th>Value</th><th>Footprint</th><th>Parts</th><th>Cut / starts at</th><th>Pitch</th><th>Bolts</th></tr></thead><tbody>${rows}</tbody></table>` +
     (hand ? `<p>Hand place: ${hand}</p>` : '');
 }
-$('saveBtn').onclick = () => download(`${baseName()}_stands.json`, JSON.stringify(state, null, 1), 'application/json');
+// ------------------------------------------------------------ projects: a file to move between computers / keep in a repo,
+// and one saved layout per board in this browser (so opening another board doesn't lose the panel's layout)
+const PROJECT_FORMAT = 1;
+const boardKey = (name) => LS_KEY + '.board:' + name;
+const RECENT_KEY = LS_KEY + '.boards';
+function recentBoards() { try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch (e) { return []; } }
+/** keep this board's layout in its own slot (called from saveLocal) */
+function saveBoardSlot() {
+  if (!state.pcb || !state.pcb.name) return;
+  try {
+    localStorage.setItem(boardKey(state.pcb.name), JSON.stringify(state));
+    const list = recentBoards().filter((b) => b.name !== state.pcb.name);
+    list.unshift({ name: state.pcb.name, saved: new Date().toISOString(), w: state.pcb.W, h: state.pcb.H });
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, 12)));
+  } catch (e) { /* storage full / unavailable */ }
+}
+function loadBoardSlot(name) { try { return JSON.parse(localStorage.getItem(boardKey(name)) || 'null'); } catch (e) { return null; } }
+/** saved state (file or slot) -> the page, defaults filled in for anything older files don't have */
+function applyState(s, pcb) {
+  if (!s || !s.cfg) throw new Error('not a pnp_stand project');
+  const { app, format, saved, ...rest } = s;
+  Object.assign(state, rest, {
+    sp: { ...S.DEFAULT_STAND, ...rest.sp }, tray: mergeTray(rest.tray),
+    op: { notInTray: 'ignore', plateZ: 0, frame: 'fids', fidMode: 'machine', fids: {}, boardZ: '', fidPart: '', ...(rest.op || {}) },
+    openpnp: { origin: 'bboxLL', hole: '', x: '', y: '', flipX: false, flipY: false, ...(rest.openpnp || {}) },
+  });
+  if (pcb) state.pcb = pcb; // a freshly opened .kicad_pcb wins over the stored copy (parts may have changed)
+  initForms(); rebuildMachine(); holeTable(); fidTable(); repackTrays(false); lineTable(); fit(); update(); recentSelect();
+}
+function recentSelect() {
+  const sel = $('recentSel'), list = recentBoards();
+  sel.innerHTML = '<option value="">– saved boards (' + list.length + ') –</option>' + list.map((b) =>
+    `<option value="${b.name.replace(/"/g, '&quot;')}">${b.name}${state.pcb && state.pcb.name === b.name ? ' (open)' : ''} · ${new Date(b.saved).toLocaleString()}</option>`).join('');
+}
+$('recentSel').addEventListener('change', (e) => {
+  const name = e.target.value; e.target.value = '';
+  if (!name) return;
+  const s = loadBoardSlot(name);
+  if (!s) return setStatus('No saved layout for ' + name, 'bad');
+  saveBoardSlot(); // keep the current board's layout before switching
+  try { applyState(s); setStatus(`✓ ${name}: saved layout restored`, 'ok'); } catch (err) { setStatus('Restore failed: ' + err.message, 'bad'); }
+});
+$('saveBtn').onclick = () => {
+  const name = state.pcb ? baseName() : 'board';
+  download(`${name}_project.json`, JSON.stringify({ app: 'pnp_stand', format: PROJECT_FORMAT, saved: new Date().toISOString(), ...state }, null, 1), 'application/json');
+  setStatus(`✓ ${name}_project.json: everything on this page (board, stands, BOM, trays / feeders, machine position)`, 'ok');
+};
 $('loadBtn').onclick = () => $('loadFile').click();
 $('loadFile').addEventListener('change', async (e) => {
-  const f = e.target.files[0]; if (!f) return;
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   try {
     const s = JSON.parse(await f.text());
-    Object.assign(state, s, { sp: { ...S.DEFAULT_STAND, ...s.sp }, tray: mergeTray(s.tray) });
-    initForms(); rebuildMachine(); holeTable(); fidTable(); lineTable(); repackTrays(false); fit();
+    if (s.format > PROJECT_FORMAT) throw new Error('made by a newer pnp_stand: update the page');
+    saveBoardSlot();
+    applyState(s); saveLocal();
+    setStatus(`✓ ${f.name} loaded${s.saved ? ' (saved ' + new Date(s.saved).toLocaleString() + ')' : ''}`, 'ok');
   } catch (err) { setStatus('Load failed: ' + err.message, 'bad'); }
 });
 
@@ -1375,6 +1439,7 @@ update();
 repackTrays(false); // after update(): placement needs the stands
 lineTable();
 update();
+recentSelect();
 if (location.hash === '#demo') { $('manRect').click(); state.prefer = 'camera'; runAuto(false); }
 if (location.hash === '#demo-corners') { $('manRect').click(); state.pcb.mode = 'corners'; holeTable(); state.prefer = 'camera'; runAuto(false); }
 </script>
