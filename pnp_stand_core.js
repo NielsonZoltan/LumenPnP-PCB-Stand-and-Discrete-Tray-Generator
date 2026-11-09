@@ -474,7 +474,11 @@
   }
   /** Stand number: 1 nearest the board's lower-left, counting anticlockwise (board frame, so rotation doesn't change it). */
   function numberMounts(pcb, mounts) {
-    const key = (h) => { let a = Math.atan2(h.v - pcb.H / 2, h.u - pcb.W / 2) + 0.75 * Math.PI; while (a < 0) a += 2 * Math.PI; return a % (2 * Math.PI); };
+    // start at the mount nearest the lower-left corner, then anticlockwise about the board centre
+    // (a fixed 225 deg start wrapped a lower-left hole on a wide board to the end)
+    const ang = (h) => Math.atan2(h.v - pcb.H / 2, h.u - pcb.W / 2);
+    const first = mounts.reduce((b, h) => (Math.hypot(h.u, h.v) < Math.hypot(b.u, b.v) ? h : b), mounts[0]);
+    const key = (h) => { let a = ang(h) - (first ? ang(first) : 0); while (a < 0) a += 2 * Math.PI; return h === first ? -1 : a % (2 * Math.PI); };
     const order = mounts.map((h, i) => i).sort((a, b) => key(mounts[a]) - key(mounts[b]));
     order.forEach((i, n) => { mounts[i].num = n + 1; });
     return mounts;

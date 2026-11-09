@@ -53,7 +53,24 @@ Open `pnp_stand.html` in a browser (double-click it; it works offline). Open `pn
    `PLAN-<line>` per tray section) and `merge_into_openpnp.py`. With OpenPnP closed, the script adds or replaces those
    parts, packages and PLAN- feeders in `~/.openpnp2` (backup first); run it again after every re-export. Lines not in a
    tray are set to Ignore (hand place) or Place. Set the reference hole in section 5 for machine X/Y, and the plate Z;
-   everything is a ballpark to teach on the machine.
+   everything is a ballpark to teach on the machine. `python3 merge_into_openpnp.py --undo` puts back the files from the
+   newest backup.
+   The XML uses only attributes older OpenPnP builds also read (a 2.x build on the Fedora PnP host refused `mark` on a
+   footprint pad and would not start until the config was restored).
+
+   **Onto the machine from the fiducials** (no reference hole needed): load the job, jog the top camera onto each
+   fiducial and edit that fiducial's X/Y in the Placements table until it's centred (or note the machine X/Y from the DRO).
+   Then, with the exported folder:
+
+   ```
+   node tools/pnp_stand/fit_fiducials.js <export dir> <out dir> FIDP1=x,y FIDP2=x,y FIDP3=x,y --z <board top Z> [--fid-part <id>] [--machine]
+   ```
+
+   It fits one rotation + shift through the fiducials (residuals printed; > 0.2 mm means a fiducial was taught on the
+   wrong mark), moves every placement and every strip feeder hole by it, and sets the job's board Z to the measured
+   value (feeder Z moves by the same amount). The job's board location is kept, so reload the board in the open job.
+   `--machine` = the values are machine X/Y, not the Placements-table values. `--fid-part` = a fiducial part id that
+   already exists in that machine's config.
 
 ## Grid model
 
@@ -71,8 +88,19 @@ in from each corner and are always keep-outs. Edit *Plate dimensions* if a plate
 | `pnp_stand_core.js` | grid, keep-outs, KiCad import, stand assignment, auto-placement, STL/SCAD export (no DOM; Node-testable) |
 | `pnp_openpnp_core.js` | OpenPnP 2.4 board / job / parts / packages / strip feeders + merge script (no DOM; Node-testable) |
 | `pnp_tray_core.js` | BOM grouping, tape table, section/lane/tray packing, tray placement, tray STL (no DOM; Node-testable) |
+| `fit_fiducials.js` | moves an exported OpenPnP project onto the machine from taught fiducials + measured board Z (Node CLI, also a module) |
 | `test_core.js` | `node tools/pnp_stand/test_core.js [board.kicad_pcb] [out_dir] [corner board] [bom.csv]`: grid, stands, trays, closed meshes |
 | `vendor/jscad-modeling.min.js` | [@jscad/modeling](https://github.com/jscad/OpenJSCAD.org) 2.12.5, MIT (`vendor/jscad-LICENSE.txt`); unpkg fallback |
+
+## On another computer
+
+- The page needs only a browser: open `pnp_stand.html` from a clone (the scripts are next to it, `vendor/` included).
+  Its settings live in that browser's localStorage, so a new machine starts from the defaults: check the stand height
+  (8.6 mm default) and floor under the nut (1.93 mm) before exporting. *Export → project JSON* carries a layout across.
+- `fit_fiducials.js` and `test_core.js` need Node 18+. The merge script needs Python 3 (no packages) and runs on the PnP
+  host, with OpenPnP closed. OpenPnP's config is `~/.openpnp2` on Linux and Windows alike.
+- A board's live PnP state (taught fiducials, measured Z, what's merged on the host) is written down next to its
+  project, e.g. `hardware/monk/openpnp/README.md` in the F28386D repo.
 
 ## Next: job planner
 
@@ -82,8 +110,10 @@ slots on the plates → OpenPnP starter config. Opulo's strip feeder models are 
 
 ## Not verified yet
 
-- OpenPnP: the files load in OpenPnP 2.4 (merged into a copy of the default config); not yet run on the machine.
-  Bottom-side placements (none on MONK) and the board rotation with the axis flips are not checked.
+- OpenPnP: the files load in OpenPnP 2.4 (merged into a copy of the default config). On the PnP host the MONK panel
+  job loads and its fiducials were taught (fit residual ≤ 0.07 mm); the merge with the fixed parts / packages and an
+  actual pick and place haven't run yet. Bottom-side placements (none on MONK) and the board rotation with the axis
+  flips are not checked.
 - Tray fit: channel clearance (tape + 0.3), recess depths and the embossed pocket relief (2.6 mm) are first guesses.
   Print one tray and adjust in *Tray dimensions*. Cut tape tends to curl; hold the strip ends down with Kapton if needed.
 - Tape widths / pitches marked ⚠ (FTR connector, PTS810 switch, body-size guesses) need the datasheet tape drawing.

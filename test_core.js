@@ -220,6 +220,24 @@ const O = require('./pnp_openpnp_core.js');
     const balanced = (x) => ['openpnp-board', 'placements', 'openpnp-parts', 'openpnp-packages', 'feeders', 'feeder', 'package', 'pipeline'].every((t) =>
       (x.match(new RegExp('<' + t + '[\\s>]', 'g')) || []).length === (x.match(new RegExp('</' + t + '>', 'g')) || []).length);
     assert(prj.files.filter((f) => f.name.endsWith('.xml')).every((f) => balanced(f.text)), 'OpenPnP XML: open / close tags balance');
+    // fiducials taught on the machine: a known 0.4 deg + shift is recovered, placements and feeders follow
+    {
+      const F = require('./fit_fiducials.js');
+      const asMap = Object.fromEntries(prj.files.map((f) => [f.name, f.text]));
+      const bName = Object.keys(asMap).find((n) => n.endsWith('.board.xml'));
+      const loc = (txt, id) => { const m = txt.match(new RegExp(`id="${id}"[^>]*>\\s*<location [^>]*x="([-\\d.]+)" y="([-\\d.]+)"[^>]*rotation="([-\\d.]+)"`)); return m && [+m[1], +m[2], +m[3]]; };
+      const fidIds = [...asMap[bName].matchAll(/id="([^"]+)"[^>]*type="Fiducial"/g)].map((x) => x[1]);
+      if (fidIds.length >= 2) {
+        const a = (0.4 * Math.PI) / 180, mv = (p) => [Math.cos(a) * p[0] - Math.sin(a) * p[1] - 30, Math.sin(a) * p[0] + Math.cos(a) * p[1] + 70];
+        const taught = Object.fromEntries(fidIds.map((id) => [id, mv(loc(asMap[bName], id))]));
+        const r = F.fitProject(asMap, taught, { z: 16 });
+        const some = [...asMap[bName].matchAll(/id="([^"]+)"[^>]*type="Place"/g)].map((x) => x[1])[0];
+        const was = loc(asMap[bName], some), now = loc(r.files[bName], some), want = mv(was);
+        assert(Math.abs(r.fit.deg - 0.4) < 1e-6 && Math.max(...r.fit.residuals) < 1e-6 && Math.hypot(now[0] - want[0], now[1] - want[1]) < 2e-3 && Math.abs(now[2] - (was[2] + 0.4 > 180 ? was[2] + 0.4 - 360 : was[2] + 0.4)) < 2e-3,
+          `fit_fiducials: ${fidIds.length} taught fiducials -> 0.4 deg + shift recovered, ${some} moved with them`);
+        assert(/z="16.000"/.test(r.files[Object.keys(asMap).find((n) => n.endsWith('.job.xml'))]), 'fit_fiducials: measured board Z in the job');
+      }
+    }
     fs.mkdirSync(path.join(outDir, 'openpnp'), { recursive: true });
     for (const f of prj.files) fs.writeFileSync(path.join(outDir, 'openpnp', f.name), f.text);
   }
