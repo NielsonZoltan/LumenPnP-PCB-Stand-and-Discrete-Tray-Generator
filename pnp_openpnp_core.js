@@ -208,11 +208,13 @@
         if (!pl || !pl.ok) { notes.push(`Opulo feeder O${f.num} is not placed: no feeders written for it.`); return; }
         for (const c of TR.opuloCoords(f, pl, o.tp)) {
           const s = c.sec, l = s.line;
-          feeders.push({ kind: 'tray', id: s.of > 1 ? `PLAN-${s.id}-${s.k}` : `PLAN-${s.id}`, name: `O${f.num}C${c.channel} #${s.id} ${l.value.split(' / ')[0]}`.slice(0, 60), partId: partIdOf(l),
+          feeders.push({ kind: 'tray', id: s.of > 1 ? `PLAN-${s.id}-${s.k}` : `PLAN-${s.id}`, name: `O${f.num}C${c.channel} #${s.id} ${l.value.split(' / ')[0]}${s.refill ? ' +' + s.refill + ' refill' : ''}`.slice(0, 60), partId: partIdOf(l),
             n: c.n, z: plateZ + c.z, rot: 0, first: toMachine(c.first), offset: { x: sx * c.offset.x, y: syy * c.offset.y } });
           partFor(l);
         }
       });
+      const refills = o.opulo.op.sections.filter((x) => x.refill).map((x) => `#${x.id} (${x.count} in the channel, ${x.refill} more to slide in)`);
+      if (refills.length) notes.push(`Refill as they run out, then reset the feeder's feed count to 0: ${refills.join(', ')}`);
       notes.push('Opulo tray feeders: the pick locations are ballparks from the plan (channels 15 mm apart about the feeder centre). For each PLAN- feeder: position the camera on the first part, capture, set Z and the part rotation, Apply.');
     }
     function partFor(l) { // fed line with no placement on this board (e.g. ordered spare part)

@@ -66,6 +66,11 @@ Open `pnp_stand.html` in a browser (double-click it; it works offline). Open `pn
    OpenPnP export (section 7) writes a ReferenceTrayFeeder per section (`PLAN-<line>`, or `PLAN-<line>-<k>` for a
    split line): first part at the back, next parts toward the front (offset −pitch in Y, like the host's own); position
    the camera on the first part, capture, set Z and rotation.
+   *Line longer than a channel* = refill gives such a line one full channel and lists how many more to slide in as
+   it runs out (reset the feeder count each time) instead of splitting it over channels. Placement: every pick goes
+   feeder → bottom camera → board, and only the feeder → camera leg depends on the layout, so channels and feeders are
+   ordered busiest first and placed nearest the bottom camera (the `camera` keep-out); the status line shows the
+   parts-weighted feeder → camera distance.
 
 7. **OpenPnP project** (OpenPnP 2.4): a .zip with `<board>.board.xml` (placements from the .kicad_pcb, origin = board
    lower-left, fiducials kept), `<board>.job.xml` (board location from this placement), `parts.xml` / `packages.xml` (one

@@ -43,6 +43,7 @@
     opTypes: '8:3:40:15 12:3:56.2:15 16:2:48:20 24:1:36 32:1:44', // Opulo feeder per tape width: W:channels:width across[:channel pitch]
     opHave: '',         // feeders you own per width, '8:10 12:2' (empty = no limit)
     opGap: 5,           // gap between two sections in one channel, mm
+    opRefill: false,    // a line longer than a channel: false = split over channels, true = one channel, slide more in as it runs out
     opLen: 120,         // Opulo feeder length (all widths)
     opUsable: 116,      // channel length that can hold parts (Opulo: 125 mm strip in the 120 mm feeder, 30 parts at 4 mm; guess)
     opOrient: 90,       // 90 = channels run front to back across the plate (bolts like A15 + G15), 180 = along the rows
@@ -485,6 +486,7 @@
    *           sections, counts, need, have, problems }
    */
   function opuloPack(lines, tp) {
+    const partsIn = (c) => c.sections.reduce((a, s) => a + s.count + (s.refill || 0), 0);
     const types = opuloTypes(tp.opTypes), have = opuloHave(tp.opHave), problems = [], secs = [], counts = {};
     const usable = Math.min(tp.opUsable, tp.opLen);
     for (const l of lines.filter((x) => x.use)) {
@@ -493,6 +495,11 @@
       const t = types[l.tapeW];
       if (!t) { problems.push(`#${l.id} ${l.value.split(' / ')[0]}: no Opulo feeder type for ${l.tapeW} mm tape (add one to the feeder types)`); continue; }
       const cap = Math.max(1, Math.floor((usable - tp.endClr) / l.pitch) - tp.leader); // parts in one full channel
+      if (tp.opRefill && s0.count > cap) {
+        // one full channel; the rest is slid in as parts run out (reset the feeder count each time)
+        secs.push({ id: l.id, line: l, k: 1, of: 1, count: cap, cap, total: s0.count, refill: s0.count - cap, tapeW: l.tapeW, tape: usable });
+        continue;
+      }
       const n = Math.max(1, Math.ceil(s0.count / cap));
       for (let k = 0; k < n; k++) {
         const count = Math.min(cap, s0.count - k * cap);
@@ -511,9 +518,12 @@
         let a = 0;
         for (const s of sections) { s.a0 = a; s.a1 = a + s.tape; a = s.a1 + tp.opGap; }
         return { sections, used: a - tp.opGap };
-      }).sort((x, y) => x.sections[0].id - y.sections[0].id);
+      }).sort((x, y) => partsIn(y) - partsIn(x) || x.sections[0].id - y.sections[0].id); // busiest channels share the first feeders
       for (let i = 0; i < channels.length; i += t.strips) feeders.push({ tapeW: W, type: t, channels: channels.slice(i, i + t.strips), len: tp.opLen, across: t.across, usable });
     }
+    // busiest feeder first: placeOpulo places in this order, so it gets the spot nearest the bottom camera
+    feeders.forEach((f) => { f.parts = f.channels.reduce((a, c) => a + partsIn(c), 0); });
+    feeders.sort((a, b) => b.parts - a.parts || a.tapeW - b.tapeW);
     feeders.forEach((f, i) => { f.index = i; f.num = i + 1; f.channels.forEach((c, k) => { c.num = k + 1; c.sections.forEach((s) => { s.feeder = f.num; s.channel = k + 1; }); }); });
     const need = {};
     for (const f of feeders) need[f.tapeW] = (need[f.tapeW] || 0) + 1;
@@ -553,6 +563,9 @@
 
   /** Place feeders one by one nearest the target; fixed: { [num]: {j, y0} } keeps user-moved feeders where they are */
   function placeOpulo(m, ko, feeders, obst, tp, target, fixed) {
+    // every pick goes feeder -> bottom camera -> board; camera -> board is the same for all parts, so the time that
+    // depends on the layout is feeder -> camera: aim at the camera (else the target), busiest feeder placed first
+    const aim = ko.camera ? { x: ko.camera.x, y: ko.camera.y } : target;
     const out = new Array(feeders.length).fill(null);
     const placed = { rects: obst.rects.slice(), polys: obst.polys, feeders: [] };
     const xs = rowXs(m), ex = m.extent;
@@ -572,7 +585,7 @@
           const r = tryOpulo(m, ko, f, j, y0, placed, tp);
           if (!r.ok) continue;
           const cy = (r.rect.y0 + r.rect.y1) / 2;
-          const cost = Math.hypot(r.xc - target.x, cy - target.y);
+          const cost = Math.hypot(r.xc - aim.x, cy - aim.y);
           if (!best || cost < best.cost) best = { ...r, cost };
         }
       }
@@ -617,7 +630,7 @@
       for (const ch of f.channels) for (const s of ch.sections) {
         const l = s.line, c = co.find((x) => x.sec === s);
         out.push([`O${f.num}`, f.tapeW, ch.num, l.id, l.value, l.footprint, l.refs.join(' '), l.mpn, `${s.k}/${s.of}`, s.count, s.tape.toFixed(0), s.a0.toFixed(0), l.pitch, l.carrier,
-          p && p.ok ? p.bolts.map((b) => b.name).join(' + ') : 'not placed', c ? c.first.x.toFixed(1) : '', c ? c.first.y.toFixed(1) : '', l.tapeNote].map(esc).join(','));
+          p && p.ok ? p.bolts.map((b) => b.name).join(' + ') : 'not placed', c ? c.first.x.toFixed(1) : '', c ? c.first.y.toFixed(1) : '', [s.refill ? `refill: ${s.refill} more` : '', l.tapeNote].filter(Boolean).join('; ')].map(esc).join(','));
       }
     }
     for (const l of lines.filter((x) => !x.use)) out.push(['', l.tapeW, '', l.id, l.value, l.footprint, l.refs.join(' '), l.mpn, '', '', '', '', l.pitch, l.carrier, 'hand place / not in a feeder', '', '', l.tapeNote].map(esc).join(','));

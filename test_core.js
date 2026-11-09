@@ -296,6 +296,19 @@ const O = require('./pnp_openpnp_core.js');
       }
     }
     {
+      // refill: a line longer than a channel gets exactly one full channel, the rest marked to slide in later
+      const otp = { ...T.DEFAULT_TRAY, holder: 'opulo', opRefill: true, boards: 3 };
+      const op = T.opuloPack(lines, otp);
+      const long = lines.filter((l) => l.use && op.types[l.tapeW] && op.counts[l.id] > Math.floor((otp.opUsable - otp.endClr) / l.pitch) - otp.leader);
+      const refillOk = long.every((l) => { const ss = op.sections.filter((s) => s.id === l.id); return ss.length === 1 && ss[0].count + ss[0].refill === op.counts[l.id] && ss[0].tape === otp.opUsable; });
+      // busiest first, and the busiest feeder no farther from the bottom camera than the quietest
+      const ordered = op.feeders.every((f, i) => i === 0 || op.feeders[i - 1].parts >= f.parts);
+      const opl = T.placeOpulo(m, ko, op.feeders, obst, otp, { x: ap.best.place.cx, y: ap.best.place.cy });
+      const d = (i) => (opl[i] && opl[i].ok ? Math.hypot(opl[i].xc - ko.camera.x, (opl[i].rect.y0 + opl[i].rect.y1) / 2 - ko.camera.y) : Infinity);
+      const near = !ko.camera || op.feeders.length < 2 || d(0) <= d(op.feeders.length - 1) + 1e-9;
+      assert(refillOk && ordered && near, `opulo refill (3 boards): ${long.length} long line(s) in one channel each + refill; feeders busiest first, busiest nearest the camera`);
+    }
+    {
       const op = T.opuloPack(lines, { ...T.DEFAULT_TRAY, holder: 'opulo', opHave: '8:1' });
       assert(op.problems.some((x) => /you have 1/.test(x)) || (op.need[8] || 0) <= 1, 'opulo: a shortage against "feeders you have" is reported');
     }

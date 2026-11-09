@@ -211,6 +211,7 @@ td input[type=number] { width: 58px; }
     <label><span>Empty pockets at the start</span><input type="number" id="tp_leader" step="1" min="0"></label>
     <div id="opuloOnly">
       <label><span>Feeders you have</span><input type="text" id="tp_opHave" placeholder="e.g. 8:10 12:2" title="Per tape width, how many Opulo feeders you own (W:count). The plan reports a shortage. Empty = no limit"></label>
+      <label><span>Line longer than a channel</span><select id="tp_opRefill" title="Split: the line takes as many channels as it needs. Refill: it gets one full channel; slide more tape in as it runs out and reset the feeder's count"><option value="0">split over channels</option><option value="1">one channel, refill as it runs out</option></select></label>
       <label><span>Gap between sections</span><input type="number" id="tp_opGap" step="1" min="0" title="Space between two cut strips in one channel, mm"></label>
       <label><span>Orientation</span><select id="tp_opOrient"><option value="90">90°: channels front → back (bolts like A15 + G15)</option><option value="180">180°: channels along the rows</option></select></label>
       <details>
@@ -843,7 +844,7 @@ function opuloSheet() {
   const { op, pl } = TRAYS;
   if (!op.feeders.length) return '';
   const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const rows = op.feeders.flatMap((f, i) => f.channels.flatMap((ch) => ch.sections.map((s) => `<tr><td><b>O${f.num}</b> C${ch.num}</td><td>${f.tapeW} mm</td><td><b>${s.id}</b></td><td>${esc(s.line.value)}</td><td>${esc(fpShort(s.line.footprint))}</td><td>${s.count}${s.of > 1 ? ` (${s.k}/${s.of})` : ''}</td><td>${s.tape.toFixed(0)} mm @ ${s.a0.toFixed(0)}</td><td>${s.line.pitch} mm ${s.line.carrier}</td><td>${pl[i] && pl[i].ok ? pl[i].bolts.map((b) => b.name).join(' + ') : 'not placed'}</td></tr>`))).join('');
+  const rows = op.feeders.flatMap((f, i) => f.channels.flatMap((ch) => ch.sections.map((s) => `<tr><td><b>O${f.num}</b> C${ch.num}</td><td>${f.tapeW} mm</td><td><b>${s.id}</b></td><td>${esc(s.line.value)}</td><td>${esc(fpShort(s.line.footprint))}</td><td>${s.count}${s.refill ? ` + ${s.refill} refill` : ''}${s.of > 1 ? ` (${s.k}/${s.of})` : ''}</td><td>${s.tape.toFixed(0)} mm @ ${s.a0.toFixed(0)}</td><td>${s.line.pitch} mm ${s.line.carrier}</td><td>${pl[i] && pl[i].ok ? pl[i].bolts.map((b) => b.name).join(' + ') : 'not placed'}</td></tr>`))).join('');
   const need = Object.entries(op.need).map(([W, n]) => `${n} × ${W} mm`).join(', ');
   const hand = state.tray.bom.lines.filter((l) => !l.use).map((l) => `${l.id} ${esc(l.value)} (${l.refs.join(' ')})`).join(', ');
   const dir = +state.tray.tp.opOrient === 180 ? 'channels along the rows, C1 at the front, "@" measured from the left end' : 'channels front to back, C1 on the left, "@" measured from the back end';
@@ -864,8 +865,9 @@ $('loadFile').addEventListener('change', async (e) => {
 
 // ------------------------------------------------------------ cut-tape trays
 const TP_KEYS = ['holder', 'boards', 'spares', 'leader', 'maxTrayW', 'laneLen', 'series', 'chClr', 'rib', 'sideWall', 'base', 'recessPaper', 'recessEmb', 'groove',
-  'labelBlock', 'labelH', 'labelDepth', 'minSection', 'endClr', 'gap', 'opTypes', 'opHave', 'opGap', 'opOrient', 'opUsable', 'opLen', 'opZ'];
+  'labelBlock', 'labelH', 'labelDepth', 'minSection', 'endClr', 'gap', 'opTypes', 'opHave', 'opGap', 'opRefill', 'opOrient', 'opUsable', 'opLen', 'opZ'];
 const TP_TEXT = ['holder', 'opTypes', 'opHave'];
+const TP_BOOL = ['series', 'opRefill'];
 const isOpulo = () => state.tray.tp.holder === 'opulo';
 function holderVis() {
   $('opuloOnly').style.display = isOpulo() ? '' : 'none';
@@ -873,11 +875,11 @@ function holderVis() {
   $('trayZipBtn').style.display = isOpulo() ? 'none' : '';
   $('trayPackBtn').textContent = isOpulo() ? 'Pack + place feeders' : 'Pack + place trays';
 }
-function trayFormFromState() { TP_KEYS.forEach((k) => { $('tp_' + k).value = k === 'series' ? (state.tray.tp.series ? '1' : '0') : state.tray.tp[k]; }); holderVis(); }
+function trayFormFromState() { TP_KEYS.forEach((k) => { $('tp_' + k).value = TP_BOOL.includes(k) ? (state.tray.tp[k] ? '1' : '0') : state.tray.tp[k]; }); holderVis(); }
 let trayTimer = 0;
 const repackSoon = () => { clearTimeout(trayTimer); trayTimer = setTimeout(() => { repackTrays(true); update(); }, 250); };
 TP_KEYS.forEach((k) => $('tp_' + k).addEventListener('input', (e) => {
-  const v = k === 'series' ? e.target.value === '1' : TP_TEXT.includes(k) ? e.target.value : +e.target.value;
+  const v = TP_BOOL.includes(k) ? e.target.value === '1' : TP_TEXT.includes(k) ? e.target.value : +e.target.value;
   if (typeof v === 'number' && (!isFinite(v) || e.target.value === '')) return;
   state.tray.tp[k] = v;
   if (k === 'holder') holderVis();
@@ -997,17 +999,24 @@ function refreshTrays() {
     return head + '\n' + lanes;
   }).join('\n\n');
 }
+/** parts-weighted mean distance first pick -> bottom camera (the leg the feeder layout changes) */
+function campDist(op, pl) {
+  if (!KO || !KO.camera) return '';
+  let sum = 0, n = 0;
+  op.feeders.forEach((f, i) => { if (pl[i] && pl[i].ok) for (const c of TR.opuloCoords(f, pl[i], state.tray.tp)) { const k = c.n + (c.sec.refill || 0); sum += k * Math.hypot(c.first.x - KO.camera.x, c.first.y - KO.camera.y); n += k; } });
+  return n ? `<div class="muted">Feeder → bottom camera: ${(sum / n).toFixed(0)} mm on average per part (busiest feeders nearest the camera)</div>` : '';
+}
 function refreshOpulo() {
   const { op, pl } = TRAYS, bad = pl.filter((p) => !p || !p.ok).length;
   const need = Object.entries(op.need).map(([W, n]) => `${n} × ${W} mm${op.have[W] ? ' (have ' + op.have[W] + ')' : ''}`).join(', ');
   $('trayStatus').innerHTML = (op.problems.length ? `<div class="err">${op.problems.map((x) => '• ' + x).join('\n')}</div>` : '') +
-    (op.feeders.length ? (bad ? `<div class="err">✗ ${bad} of ${op.feeders.length} feeder(s) don't fit where they are: drag them or press Pack + place</div>` : `<span class="okc">✓ ${op.sections.length} sections in ${op.feeders.length} Opulo feeder(s): ${need}</span>`) : '');
+    (op.feeders.length ? (bad ? `<div class="err">✗ ${bad} of ${op.feeders.length} feeder(s) don't fit where they are: drag them or press Pack + place</div>` : `<span class="okc">✓ ${op.sections.length} sections in ${op.feeders.length} Opulo feeder(s): ${need}</span>`) : '') + campDist(op, pl);
   const hand = state.tray.bom.lines.filter((l) => !l.use).map((l) => `#${l.id} ${l.value.split(' / ')[0]}`).join(', ');
   // channel C1 is the leftmost (90°) / frontmost (180°); a section starts "@ mm" from the channel's first end (back / left)
   $('trayList').textContent = op.feeders.map((f, i) => {
     const p = pl[i];
     return `O${f.num}  ${f.tapeW} mm feeder, ${f.channels.length}/${f.type.strips} channels` + (p && p.ok ? `, bolts ${p.bolts.map((b) => b.name).join(' + ')}` : `  ✗ ${p ? p.why : 'not placed'}`) + '\n' +
-      f.channels.map((ch) => `  C${ch.num} (${ch.used.toFixed(0)} of ${f.usable} mm): ` + ch.sections.map((s) => `#${s.id} ${s.count} pcs${s.of > 1 ? ` [${s.k}/${s.of}]` : ''} ${s.tape.toFixed(0)} mm @${s.a0.toFixed(0)}`).join('  →  ')).join('\n');
+      f.channels.map((ch) => `  C${ch.num} (${ch.used.toFixed(0)} of ${f.usable} mm): ` + ch.sections.map((s) => `#${s.id} ${s.count} pcs${s.refill ? ` (+${s.refill} refill)` : ''}${s.of > 1 ? ` [${s.k}/${s.of}]` : ''} ${s.tape.toFixed(0)} mm @${s.a0.toFixed(0)}`).join('  →  ')).join('\n');
   }).join('\n\n') + (hand ? `\n\nHand place / not in a feeder: ${hand}` : '');
 }
 function drawOpulo(g) {
