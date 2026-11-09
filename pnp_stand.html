@@ -274,7 +274,7 @@ td input[type=number] { width: 58px; }
 <script src="vendor/jscad-modeling.min.js"></script>
 <script>if (!window.jscadModeling) document.write('<script src="https://unpkg.com/@jscad/modeling@2.12.5/dist/jscad-modeling.min.js"><\/script>');</script>
 <script src="pnp_stand_core.js?v=5"></script>
-<script src="pnp_tray_core.js?v=4"></script>
+<script src="pnp_tray_core.js?v=5"></script>
 <script src="pnp_openpnp_core.js?v=3"></script>
 <script>
 'use strict';
@@ -298,7 +298,7 @@ td input[type=number] { width: 58px; }
 //   written to the tray feeders, instead of 0 + fix on the machine.
 const S = window.PnpStand, TR = window.PnpTray, OP = window.PnpOpenPnP;
 // the browser can keep an old copy of the core after an update; say so instead of failing later
-const CORE_VERSION = 5, TRAY_VERSION = 4, OPENPNP_VERSION = 3;
+const CORE_VERSION = 5, TRAY_VERSION = 5, OPENPNP_VERSION = 3;
 if (!S || S.VERSION !== CORE_VERSION || !TR || TR.VERSION !== TRAY_VERSION || !OP || OP.VERSION !== OPENPNP_VERSION) {
   addEventListener('DOMContentLoaded', () => {
     const b = document.createElement('div');

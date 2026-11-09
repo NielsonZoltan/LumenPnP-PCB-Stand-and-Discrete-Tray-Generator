@@ -16,7 +16,7 @@
   const S = typeof module !== 'undefined' && module.exports ? require('./pnp_stand_core.js') : root.PnpStand;
   const { distPointRect, rectsOverlap, distSegRect } = S._;
 
-  const VERSION = 4;
+  const VERSION = 5;
 
   // ------------------------------------------------------------------ tray parameters
   const DEFAULT_TRAY = {
