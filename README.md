@@ -78,15 +78,20 @@ Open `pnp_stand.html` in a browser (double-click it; it works offline). Open `pn
    `PLAN-<line>` per tray section) and `merge_into_openpnp.py`. With OpenPnP closed, the script adds those
    parts and packages (one the machine already has is kept: it was tuned there; only ids the script added itself,
    listed in `pnp_stand_ids.txt` in the config dir, get updated) and replaces the PLAN- feeders in `~/.openpnp2` (backup first); run it again after every re-export. Lines not in a
-   tray are set to Ignore (hand place) or Place. Set the reference hole in section 5 for machine X/Y, and the plate Z;
-   everything is a ballpark to teach on the machine. `python3 merge_into_openpnp.py --undo` puts back the files from the
-   newest backup.
+   tray are set to Ignore (hand place) or Place. `python3 merge_into_openpnp.py --undo` undoes one run per call.
+   **Machine position** (section 7) decides how plate coordinates become machine X/Y: *taught fiducials* (type each
+   fiducial's machine X/Y from the DRO, or the OpenPnP Placements-table value, plus the measured board top Z; the page
+   fits a rotation + shift, shows each fiducial's residual and writes everything in machine coordinates, the same code
+   as `fit_fiducials.js`), *a reference grid hole* (its machine X/Y), or *none*. The export refuses to run until the
+   chosen one is filled in, and *none* asks first. *Export everything* puts stand STLs, tray STLs, the setup CSV, the
+   print sheet, the OpenPnP project and the project JSON in one zip. The chips under the title show which step is
+   done; long help sits behind the *i* icons.
    The XML uses only attributes older OpenPnP builds also read (a 2.x build on the Fedora PnP host refused `mark` on a
    footprint pad and would not start until the config was restored).
 
-   **Onto the machine from the fiducials** (no reference hole needed): load the job, jog the top camera onto each
-   fiducial and edit that fiducial's X/Y in the Placements table until it's centred (or note the machine X/Y from the DRO).
-   Then, with the exported folder:
+   **Fitting an export that's already out** (plate coordinates, or re-teaching later) without the page: load the job,
+   jog the top camera onto each fiducial and edit that fiducial's X/Y in the Placements table until it's centred (or
+   note the machine X/Y from the DRO). Then, with the exported folder:
 
    ```
    node tools/pnp_stand/fit_fiducials.js <export dir> <out dir> FIDP1=x,y FIDP2=x,y FIDP3=x,y --z <board top Z> [--fid-part <id>] [--machine]

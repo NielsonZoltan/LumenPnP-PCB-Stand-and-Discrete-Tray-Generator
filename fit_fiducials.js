@@ -12,7 +12,10 @@
 // every strip feeder hole, so board, job and feeders all come out in machine coordinates. The job's board location is
 // kept: the correction lives in the placements, so the job you already have open keeps working once the board is reloaded.
 // Prints the residual per fiducial: more than ~0.2 mm means a fiducial was taught on the wrong mark.
+// Also loads in the page (pnp_stand.html, window.PnpFit), which runs the same fit on the OpenPnP export.
+(function (root) {
 'use strict';
+const VERSION = 1;
 
 /** least-squares rotation + shift taking points P onto Q (2D, no scale) */
 function fitRigid(P, Q) {
@@ -91,9 +94,11 @@ function fitProject(files, taught, opts = {}) {
   return { files: out, fit, job: { board: boardName, x: B.x, y: B.y, z } };
 }
 
-module.exports = { fitRigid, fitProject };
+const api = { VERSION, fitRigid, fitProject };
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+else root.PnpFit = api;
 
-if (require.main === module) {
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
   const fs = require('fs'), path = require('path');
   const args = process.argv.slice(2), pos = [], taught = {}, opts = {};
   for (let i = 0; i < args.length; i++) {
@@ -122,3 +127,4 @@ if (require.main === module) {
   }
   console.log('written to', outDir, '| changed:', Object.keys(r.files).join(', '));
 }
+})(typeof window !== 'undefined' ? window : globalThis);

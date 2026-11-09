@@ -61,12 +61,23 @@ td input[type=number] { width: 58px; }
 .legend { position: absolute; left: 10px; bottom: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--muted); max-width: 520px; }
 .out { font: 12px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
 #sheet { display: none; }
+.info { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--muted); color: var(--muted); font: italic 700 10px/1 Georgia, serif; cursor: help; margin-left: 5px; vertical-align: 1px; flex: none; }
+.info:hover, .info:focus { border-color: var(--accent); color: var(--accent); outline: none; }
+#tipBox { position: fixed; z-index: 50; max-width: 320px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font-size: 12px; line-height: 1.45; box-shadow: 0 4px 16px rgba(0,0,0,.25); pointer-events: none; display: none; }
+#tipBox code { font-size: 11px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; }
+.chip { font-size: 11px; padding: 2px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); cursor: pointer; background: var(--bg); }
+.chip.ok { color: var(--ok); border-color: var(--ok); }
+.chip.warn { color: var(--warn); border-color: var(--warn); }
+.chip.bad { color: var(--bad); border-color: var(--bad); }
+.frame { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; margin: 4px 0; }
+#fidTable input[type=number] { width: 72px; }
 @media (max-width: 800px) {
   .app { grid-template-columns: 1fr; grid-template-rows: auto 70vh; height: auto; }
   aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 16px; }
 }
 @media print {
-  aside, .toolbar, .legend { display: none !important; }
+  aside, .toolbar, .legend, #tipBox { display: none !important; }
   .app { display: block; height: auto; }
   main { overflow: visible; }
   #view { height: 120mm; }
@@ -79,7 +90,8 @@ td input[type=number] { width: 58px; }
 <div class="app">
 <aside>
   <h1>LumenPnP stand generator</h1>
-  <p class="sub">PCB stands for the staging-plate grid: pick the grid holes, place the board, export STL and OpenSCAD files.</p>
+  <p class="sub">Stands, cut-tape holders and an OpenPnP starter for the LumenPnP staging plates.<span class="info" tabindex="0" data-tip="Work top to bottom: machine, board, stands, placement, then cut tape (our printed trays or Opulo tray feeders) and the OpenPnP project. Hover an <b>i</b> for details. Everything is saved in this browser; <i>Save project</i> moves it to another computer.">i</span></p>
+  <div class="chips" id="chips"></div>
 
   <details open>
     <summary>1 · Machine</summary>
@@ -97,10 +109,10 @@ td input[type=number] { width: 58px; }
       <label><span>Plate screw inset</span><input type="number" id="pl_screwInset" step="0.5"></label>
       <label><span>Plate screw keep-out ⌀</span><input type="number" id="pl_screwKeepD" step="0.5"></label>
     </details>
-    <div class="muted" style="margin-top:6px">Keep-outs (one per line): <code>camera d20 52</code>, <code>circle E12 30</code>, <code>rect d16 g19 [margin]</code>, <code>block c5 e5</code>, <code>circle@ x y d</code>, <code>rect@ x0 y0 x1 y1</code></div>
+    <div class="muted" style="margin-top:6px">Keep-outs<span class="info" tabindex="0" data-tip="One per line: <code>camera d20 52</code> (also the target for “near the camera” and for feeder placement), <code>circle E12 30</code>, <code>rect d16 g19 [margin]</code>, <code>block c5 e5</code>, <code>circle@ x y d</code>, <code>rect@ x0 y0 x1 y1</code>. Click a grid hole in the view to block or unblock it.">i</span></div>
     <textarea id="keepouts" spellcheck="false"></textarea>
     <div id="koErr" class="err"></div>
-    <div class="muted">Click a grid hole in the view to block or unblock it. <span id="clickBlocked"></span></div>
+    <div class="muted"><span id="clickBlocked"></span></div>
   </details>
 
   <details open>
@@ -118,7 +130,7 @@ td input[type=number] { width: 58px; }
     <label><span>Fix the board by</span><select id="pcbMode"><option value="holes">mounting / tooling holes</option><option value="corners">board corners (L-wall stands)</option></select></label>
     <div id="cornerBox" class="row"></div>
     <table id="holeTable"><thead><tr><th>mount</th><th>ref</th><th>u</th><th>v</th><th>⌀</th><th></th></tr></thead><tbody></tbody></table>
-    <div class="row"><button id="addHole">+ hole</button><span class="muted">u/v in mm from the board's lower-left corner, top view.</span></div>
+    <div class="row"><button id="addHole">+ hole</button><span class="info" tabindex="0" data-tip="u / v in mm from the board's lower-left corner, top view. Tick the holes the stands should use.">i</span></div>
   </details>
 
   <details open>
@@ -180,7 +192,7 @@ td input[type=number] { width: 58px; }
   </details>
 
   <details open>
-    <summary>5 · Export</summary>
+    <summary>5 · Export stands</summary>
     <div class="row">
       <button class="primary" id="stlBtn" title="A .zip with a folder holding one STL per stand, named number_ref">Stands (.zip, one STL each)</button>
       <button id="stlAllBtn" title="All stands laid out side by side in a single STL">All in one STL</button>
@@ -188,21 +200,11 @@ td input[type=number] { width: 58px; }
       <button id="printBtn">Print sheet</button>
     </div>
     <div class="row" id="perStand"></div>
-    <details>
-      <summary class="muted">OpenPnP board location</summary>
-      <label><span>Board origin</span><select id="originSel"><option value="bboxLL">board lower-left (bbox)</option><option value="aux">drill/place origin</option><option value="page">KiCad page origin</option></select></label>
-      <label><span>Reference hole</span><input type="text" class="w" id="refHole" placeholder="e.g. b2"></label>
-      <label><span>Its machine X / Y</span><span><input type="number" id="refX" step="0.01"> <input type="number" id="refY" step="0.01"></span></label>
-      <label><span>Machine X runs toward row 1</span><input type="checkbox" id="flipX"></label>
-      <label><span>Machine Y runs toward the front</span><input type="checkbox" id="flipY"></label>
-      <div id="opOut" class="out"></div>
-    </details>
     <div class="row"><button id="saveBtn">Save project</button><button id="loadBtn">Load project</button><input type="file" id="loadFile" accept=".json" hidden></div>
   </details>
 
   <details open>
-    <summary>6 · Cut tape: our trays or Opulo tray feeders</summary>
-    <div class="muted">One BOM line per reel (grouped by value + footprint like <code>bom_reels.py</code>). Each line gets a section of cut tape: (parts + empty pockets) × pitch. <b>Our trays</b>: sections share lanes, lanes share trays, printed here. <b>Opulo tray feeders</b>: sections go end to end in the channels of Opulo's printed feeders (8 / 12 mm: 3 channels), with a gap between them; OpenPnP gets one tray feeder per section. Drag a tray or feeder to move it.</div>
+    <summary>6 · Cut tape<span class="info" tabindex="0" data-tip="One BOM line per reel (grouped by value + footprint like <code>bom_reels.py</code>). Each line gets a section of cut tape: (parts + empty pockets) × pitch. <b>Our trays</b>: sections share lanes, lanes share trays, printed here. <b>Opulo tray feeders</b>: sections go end to end in the channels of Opulo’s printed feeders (8 / 12 mm: 3 channels) with a gap between them, busiest feeders nearest the bottom camera; OpenPnP gets one tray feeder per section. Drag a tray or feeder to move it.">i</span></summary>
     <label><span>Holder</span><select id="tp_holder"><option value="tray">our cut-tape trays (printed here)</option><option value="opulo">Opulo LumenPnP printed tray feeders</option></select></label>
     <div class="row"><button class="primary" id="openBom" title="KiCad BOM CSV (Qty per board), or a DigiKey order CSV (Qty = what you ordered; needs the .kicad_pcb open)">Open BOM / DigiKey order .csv…</button><input type="file" id="bomFile" accept=".csv" hidden></div>
     <div id="bomInfo" class="muted"></div>
@@ -242,18 +244,33 @@ td input[type=number] { width: 58px; }
     </details>
     </div>
     <label><span>Clearance to other things</span><input type="number" id="tp_gap" step="0.5"></label>
-    <div style="overflow-x:auto"><table id="lineTable"><thead><tr><th title="in a tray / strip feeder (untick = hand place)">use</th><th>#</th><th>value</th><th>qty</th><th>parts</th><th>tape</th><th>pitch</th><th>carrier</th></tr></thead><tbody></tbody></table></div>
+    <div style="overflow-x:auto"><table id="lineTable"><thead><tr><th title="in a tray / feeder (untick = hand place)">use</th><th>#</th><th>value</th><th>qty</th><th>parts</th><th title="tray / lane, or Opulo feeder / channel @ mm from the first end">where</th><th>tape</th><th>pitch</th><th>carrier</th></tr></thead><tbody></tbody></table></div>
     <div class="row"><button class="primary" id="trayPackBtn" title="Repack the sections and auto-place every tray (forgets trays you moved)">Pack + place trays</button><button id="trayZipBtn" title="One STL per tray and sections.csv in a .zip">Trays (.zip)</button><button id="trayCsvBtn" title="Which line goes where (sections / feeder strips)">Setup CSV</button></div>
     <div id="trayStatus"></div>
     <div id="trayList" class="out" style="margin-top:6px"></div>
   </details>
 
   <details open>
-    <summary>7 · OpenPnP project</summary>
-    <div class="muted">Starter files for OpenPnP 2.4: board (placements from the .kicad_pcb, fiducials), job (board location from this placement), parts + packages (one per BOM line), a strip feeder per tray section, and a merge script. Coordinates are ballparks: teach on the machine. Set the reference hole in <i>5 · OpenPnP board location</i> to get machine X/Y.</div>
+    <summary>7 · OpenPnP project<span class="info" tabindex="0" data-tip="Starter files for OpenPnP (2023 build and 2.4): board (placements + fiducials from the .kicad_pcb), job (board location), parts + packages (one per BOM line), a feeder per tray section / Opulo section, and <code>merge_into_openpnp.py</code> (backs up first; <code>--undo</code>). Pick locations are ballparks: check each on the machine.">i</span></summary>
+    <label><span>Machine position<span class="info" tabindex="0" data-tip="How plate coordinates become machine X/Y. <b>Taught fiducials</b>: jog the top camera onto each fiducial, type its machine X/Y (or the Placements-table value); a rotation + shift is fitted. <b>Reference hole</b>: jog to one grid hole, type its X/Y. Without either, the export stays in plate coordinates and every pick location is off by the same amount.">i</span></span><select id="op_frame"><option value="fids">taught fiducials</option><option value="hole">a reference grid hole</option><option value="plate">none (plate coordinates)</option></select></label>
+    <div id="frameFids" class="frame">
+      <label><span>Values are<span class="info" tabindex="0" data-tip="<b>Machine X/Y</b>: the DRO with the camera centred on the fiducial. <b>Placements table</b>: what OpenPnP shows in the Job tab’s Placements table after you edited the fiducial there (relative to the board location).">i</span></span><select id="op_fidMode"><option value="machine">machine X / Y (DRO)</option><option value="table">OpenPnP Placements table</option></select></label>
+      <table id="fidTable"><thead><tr><th>fiducial</th><th>X</th><th>Y</th><th>residual</th></tr></thead><tbody></tbody></table>
+      <label><span>Board top Z (measured)<span class="info" tabindex="0" data-tip="Nozzle on the board top, read Z. Sets the job’s board Z and moves every feeder Z with it. Empty = plate top Z + stand + board.">i</span></span><input type="number" id="op_boardZ" step="0.1"></label>
+      <label><span>Fiducial part id<span class="info" tabindex="0" data-tip="Optional: a fiducial part that already exists on the machine (e.g. <code>Fiducial_1mm_Mask3mm-Fiducial</code>), used instead of the generated FIDUCIAL-1mm.">i</span></span><input type="text" class="w" id="op_fidPart"></label>
+      <div id="fidOut" class="muted"></div>
+    </div>
+    <div id="frameHole" class="frame">
+      <label><span>Board origin</span><select id="originSel"><option value="bboxLL">board lower-left (bbox)</option><option value="aux">drill/place origin</option><option value="page">KiCad page origin</option></select></label>
+      <label><span>Reference hole</span><input type="text" class="w" id="refHole" placeholder="e.g. b2"></label>
+      <label><span>Its machine X / Y</span><span><input type="number" id="refX" step="0.01"> <input type="number" id="refY" step="0.01"></span></label>
+      <label><span>Machine X runs toward row 1</span><input type="checkbox" id="flipX"></label>
+      <label><span>Machine Y runs toward the front</span><input type="checkbox" id="flipY"></label>
+      <div id="opOut" class="out"></div>
+    </div>
     <label><span>Lines not in a tray / feeder</span><select id="op_notInTray"><option value="ignore">Ignore (hand place)</option><option value="place">Place (feeder set up on the machine)</option></select></label>
-    <label><span>Plate top Z (machine)</span><input type="number" id="op_plateZ" step="0.1" title="Machine Z of the staging plate top; board Z = this + stand height + board thickness, feeder Z = this + tape surface"></label>
-    <div class="row"><button class="primary" id="opBtn">OpenPnP project (.zip)</button></div>
+    <label><span>Plate top Z (machine)</span><input type="number" id="op_plateZ" step="0.1" title="Z on OpenPnP's readout with the nozzle touching the bare plate. Board Z = this + stand height + board thickness; feeder Z = this + pick height. With a measured board top Z (taught fiducials), feeders follow the board instead"></label>
+    <div class="row"><button class="primary" id="opBtn">OpenPnP project (.zip)</button><button id="allBtn" title="One zip: stand STLs, tray STLs (trays), setup CSV, print sheet, OpenPnP project, project JSON">Export everything (.zip)</button></div>
     <div id="opNotes" class="muted"></div>
   </details>
 </aside>
@@ -262,13 +279,14 @@ td input[type=number] { width: 58px; }
   <div class="toolbar">
     <button id="fitBtn">Fit</button>
     <button id="themeBtn">Theme</button>
-    <span class="muted">Drag the board · drag empty space to pan · wheel to zoom · R rotates · click a hole to block it</span>
+    <span class="info" tabindex="0" data-tip="Drag the board, a tray or a feeder · drag empty space to pan · wheel to zoom · R rotates the board · click a grid hole to block it">i</span>
     <span class="status" id="status"></span>
   </div>
   <svg id="view" xmlns="http://www.w3.org/2000/svg"><g id="gStatic"></g><g id="gDyn"></g></svg>
   <div class="legend" id="legend"></div>
   <div id="sheet"></div>
 </main>
+<div id="tipBox"></div>
 </div>
 
 <script src="vendor/jscad-modeling.min.js"></script>
@@ -276,33 +294,38 @@ td input[type=number] { width: 58px; }
 <script src="pnp_stand_core.js?v=5"></script>
 <script src="pnp_tray_core.js?v=5"></script>
 <script src="pnp_openpnp_core.js?v=3"></script>
+<script src="fit_fiducials.js?v=1"></script>
 <script>
 'use strict';
-// ------------------------------------------------------------------------------------------------ UI to-dos (2026-11-09)
+// ------------------------------------------------------------------------------------------------ UI to-dos
 // Ranked by how much they'd save on a real run. Each is independent.
-// TODO(ui-1) Machine calibration once, not per board: reference hole + machine X/Y, plate Z, measured board Z and taught
-//   fiducials in one "Machine" record (saved with the machine profile), so section 5 / 7 values and fit_fiducials.js
-//   (fiducials -> machine coords) run inside the page instead of a Node CLI. Biggest source of hand steps today.
-// TODO(ui-2) "Export everything" button: one zip with stand STLs, tray STLs (if trays), Setup CSV, print sheet (HTML),
-//   OpenPnP project and project JSON. Today it's 4-5 buttons in 3 sections.
+// DONE 2026-11-09: ui-1 (part) taught fiducials / reference hole / plate choice in section 7 with the fit in the page and
+//   an export that refuses to go out in plate coordinates silently; ui-2 Export everything; ui-4 (part) "where" column;
+//   ui-5 status chips; long help moved behind i icons.
+// TODO(ui-1) Rest of it: keep the machine position (fiducials, board Z, plate Z, reference hole) per machine + board
+//   layout, so another board on the same stands reuses it; show the fit's machine X/Y of each feeder in the list.
 // TODO(ui-3) Per-board saved state: localStorage holds one layout; key it by board name and list recent boards, so
 //   opening another board doesn't overwrite the panel layout (the taught fiducials depend on that layout).
-// TODO(ui-4) Line table: show where each line went (T1 L2 / O3 C2 @40) and hover / click to highlight its section on the
-//   plates (and the reverse: hover a section -> row). Bulk untick by kind (connectors, QFP / BGA, switches).
-// TODO(ui-5) Guided steps: a status chip per section (✓ board, ✓ stands fit, ✓ BOM, ✓ trays / feeders placed, ✓ OpenPnP)
-//   at the top of the sidebar, each jumps to its section; collapse finished sections.
+// TODO(ui-4) Rest of it: hover / click a line to highlight its section on the plates (and section -> row); bulk untick by
+//   kind (connectors, QFP / BGA, switches).
 // TODO(ui-6) Hide expert fields by default (stand pin / boss / corner-mode details, tray wall dimensions) behind
 //   "Advanced", keep height, bolt preset, floor under nut, boards per run, spares, holder visible.
 // TODO(ui-7) Undo for drags (Ctrl+Z) and a lock toggle per tray / feeder, so Pack + place keeps hand-placed ones.
 // TODO(ui-8) Opulo: per-section part rotation (tape-relative, like OpenPnP's "Rotation in Tape") in the line table and
 //   written to the tray feeders, instead of 0 + fix on the machine.
-const S = window.PnpStand, TR = window.PnpTray, OP = window.PnpOpenPnP;
+// TODO(ui-9) Read the taught fiducials straight from the board file OpenPnP saved on the machine (its Fiducial placements)
+//   instead of typing them: "Import from OpenPnP board.xml" in section 7.
+// TODO(ui-10) Read the captured tray-feeder locations back from the machine's machine.xml and correct the Opulo model
+//   (channel pitch, pocket offset from the channel centre, usable length) so the next export lands closer.
+// TODO(ui-11) Collapse sections once their chip is green, and open the next unfinished one.
+// TODO(ui-12) Sidebar is 360 px: on a small laptop the line table scrolls sideways; let the sidebar be dragged wider.
+const S = window.PnpStand, TR = window.PnpTray, OP = window.PnpOpenPnP, FIT = window.PnpFit;
 // the browser can keep an old copy of the core after an update; say so instead of failing later
-const CORE_VERSION = 5, TRAY_VERSION = 5, OPENPNP_VERSION = 3;
-if (!S || S.VERSION !== CORE_VERSION || !TR || TR.VERSION !== TRAY_VERSION || !OP || OP.VERSION !== OPENPNP_VERSION) {
+const CORE_VERSION = 5, TRAY_VERSION = 5, OPENPNP_VERSION = 3, FIT_VERSION = 1;
+if (!S || S.VERSION !== CORE_VERSION || !TR || TR.VERSION !== TRAY_VERSION || !OP || OP.VERSION !== OPENPNP_VERSION || !FIT || FIT.VERSION !== FIT_VERSION) {
   addEventListener('DOMContentLoaded', () => {
     const b = document.createElement('div');
-    b.textContent = `pnp_stand_core.js / pnp_tray_core.js is an old cached copy (needs core ${CORE_VERSION}, trays ${TRAY_VERSION}, OpenPnP ${OPENPNP_VERSION}). Press Ctrl+F5 to reload.`;
+    b.textContent = `pnp_stand_core.js / pnp_tray_core.js is an old cached copy (needs core ${CORE_VERSION}, trays ${TRAY_VERSION}, OpenPnP ${OPENPNP_VERSION}, fit ${FIT_VERSION}). Press Ctrl+F5 to reload.`;
     b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99;padding:8px 12px;background:#b3261e;color:#fff;font:14px system-ui';
     document.body.appendChild(b);
   });
@@ -325,14 +348,14 @@ const state = {
   snap: 0.5,
   openpnp: { origin: 'bboxLL', hole: '', x: '', y: '', flipX: false, flipY: false },
   tray: { tp: { ...TR.DEFAULT_TRAY }, bom: null, pos: {}, opos: {}, layout: null },
-  op: { notInTray: 'ignore', plateZ: 0 },
+  op: { notInTray: 'ignore', plateZ: 0, frame: 'fids', fidMode: 'machine', fids: {}, boardZ: '', fidPart: '' },
 };
 let M = null, KO = null, RES = null, TRAYS = null;
 
 function loadLocal() {
   try {
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
-    if (s && s.cfg) Object.assign(state, s, { sp: { ...S.DEFAULT_STAND, ...s.sp }, tray: mergeTray(s.tray), op: { notInTray: 'ignore', plateZ: 0, ...(s.op || {}) } });
+    if (s && s.cfg) Object.assign(state, s, { sp: { ...S.DEFAULT_STAND, ...s.sp }, tray: mergeTray(s.tray), op: { ...{ notInTray: 'ignore', plateZ: 0, frame: 'fids', fidMode: 'machine', fids: {}, boardZ: '', fidPart: '' }, ...(s.op || {}) } });
   } catch (e) { /* storage unavailable */ }
 }
 function mergeTray(t) { return { bom: null, pos: {}, opos: {}, layout: null, ...(t || {}), tp: { ...TR.DEFAULT_TRAY, ...((t && t.tp) || {}) } }; }
@@ -436,6 +459,7 @@ function setPcb(pcb, center) {
   }
   if (pcb.thickness) { state.sp.pcbThick = pcb.thickness; $('sp_pcbThick').value = pcb.thickness; }
   holeTable();
+  fidTable();
   update();
 }
 function holeTable() {
@@ -642,6 +666,7 @@ function update() {
     per.appendChild(b);
   });
   openpnpOut();
+  refreshChips(); fitSoon();
   const lg = $('legend');
   lg.innerHTML = `<b>${state.cfg.plates.map((pl) => `${pl.name}: ${pl.lower ? 'a–g' : 'A–G'}${pl.prefix ? ' (prefix ' + pl.prefix + ')' : ''}, A at ${pl.aAt}`).join(' · ')}</b><br>` +
     `Grid ${M.nRows} rows × ${M.nCols} letters, ${M.P.pitch} mm pitch. Blue = stands, green = board, red = keep-out. The dot on the board marks its lower-left corner.`;
@@ -812,18 +837,17 @@ $('scadBtn').onclick = () => {
   const meta = `${baseName()} at X ${state.place.cx.toFixed(2)} Y ${state.place.cy.toFixed(2)} rot ${state.place.rot}`;
   download(`${baseName()}_stands.scad`, S.scadSource(RES.stands, ES(), meta), 'text/plain');
 };
-$('printBtn').onclick = () => {
-  if (!RES) return;
-  const sh = $('sheet'), sp = ES();
+function sheetHtml() {
+  const sp = ES();
   const rows = RES.stands.map((st) => `<tr><td><b>${st.num}</b></td><td>${st.kind === 'corner' ? 'corner ' + st.ref : st.ref}</td><td>${st.d ? st.d.toFixed(2) : '–'}</td><td><b>${st.bolts.map((b) => b.name).join(' + ')}</b></td></tr>`).join('');
-  sh.innerHTML = `<h2>${state.pcb.name}: LumenPnP stands</h2>
+  return `<h2>${state.pcb.name}: LumenPnP stands</h2>
     <p>Board centre X ${state.place.cx.toFixed(2)} Y ${state.place.cy.toFixed(2)} mm, rotation ${state.place.rot}°, <b>${state.place.flip ? 'bottom' : 'top'} side up</b>, board ${sp.pcbThick} mm thick.
     Stand height ${sp.height} mm, ${sp.bolts} M3 bolt(s) per stand, ${sp.pocket === 'hex' ? 'nut on top' : sp.pocket === 'round' ? 'screw head on top' : 'plain holes'},
     PCB ${sp.iface === 'pin' ? 'on printed pins' : 'on blind holes'}. ${state.cfg.plates.map((p) => `${p.name}: ${p.lower ? 'a–g' : 'A–G'}`).join(', ')}.</p>
     <table><thead><tr><th>Stand</th><th>PCB hole</th><th>⌀</th><th>Grid holes</th></tr></thead><tbody>${rows}</tbody></table>
     <pre>${$('opOut').textContent}</pre>${traySheet()}`;
-  window.print();
-};
+}
+$('printBtn').onclick = () => { if (!RES) return; $('sheet').innerHTML = sheetHtml(); window.print(); };
 function traySheet() {
   if (TRAYS && TRAYS.op) return opuloSheet();
   if (!TRAYS || !TRAYS.pk.trays.length) return '';
@@ -859,7 +883,7 @@ $('loadFile').addEventListener('change', async (e) => {
   try {
     const s = JSON.parse(await f.text());
     Object.assign(state, s, { sp: { ...S.DEFAULT_STAND, ...s.sp }, tray: mergeTray(s.tray) });
-    initForms(); rebuildMachine(); holeTable(); lineTable(); repackTrays(false); fit();
+    initForms(); rebuildMachine(); holeTable(); fidTable(); lineTable(); repackTrays(false); fit();
   } catch (err) { setStatus('Load failed: ' + err.message, 'bad'); }
 });
 
@@ -898,11 +922,13 @@ function lineTable() {
   const pk = TRAYS && TRAYS.pk;
   for (const l of b.lines) {
     const s = pk && pk.sections.find((x) => x.id === l.id), cnt = TRAYS && TRAYS.op ? TRAYS.op.counts[l.id] : s ? s.count : null;
+    const where = !l.use ? 'hand' : TRAYS && TRAYS.op ? TRAYS.op.sections.filter((x) => x.id === l.id).map((x) => `O${x.feeder} C${x.channel} @${x.a0.toFixed(0)}`).join(', ')
+      : pk ? (pk.trays.map((t) => t.lanes.findIndex((ln) => ln.sections.some((x) => x.id === l.id)) >= 0 ? `T${t.num} L${t.lanes.findIndex((ln) => ln.sections.some((x) => x.id === l.id)) + 1}` : '').filter(Boolean)[0] || '') : '';
     const tr = document.createElement('tr');
     tr.title = `${l.refs.join(' ')}\n${l.footprint}${l.mpn ? '\n' + l.mpn : ''}${l.tapeNote ? '\nTape: ' + l.tapeNote : ''}`;
     tr.innerHTML = `<td><input type="checkbox" data-k="use" ${l.use ? 'checked' : ''}></td><td><b>${l.id}</b></td>
       <td>${l.value.split(' / ')[0].slice(0, 16)}<div class="muted" style="font-size:11px">${fpShort(l.footprint)}${l.tapeNote ? ' <span style="color:var(--warn)">⚠</span>' : ''}</div></td>
-      <td>${l.qty}</td><td>${cnt != null ? cnt : '–'}</td>
+      <td>${l.qty}</td><td>${cnt != null ? cnt : '–'}</td><td class="muted" style="white-space:nowrap">${where}</td>
       <td><select data-k="tapeW">${[8, 12, 16, 24, 32, 44].map((w) => `<option ${w === l.tapeW ? 'selected' : ''}>${w}</option>`).join('')}</select></td>
       <td><select data-k="pitch">${[2, 4, 8, 12, 16, 20, 24].map((w) => `<option ${w === l.pitch ? 'selected' : ''}>${w}</option>`).join('')}</select></td>
       <td><select data-k="carrier"><option value="paper" ${l.carrier === 'paper' ? 'selected' : ''}>paper</option><option value="embossed" ${l.carrier === 'embossed' ? 'selected' : ''}>emb.</option></select></td>`;
@@ -1106,28 +1132,200 @@ $('trayZipBtn').onclick = () => {
 };
 
 // ------------------------------------------------------------ OpenPnP project
-['op_notInTray', 'op_plateZ'].forEach((id) => $(id).addEventListener('input', () => {
-  state.op = { notInTray: $('op_notInTray').value, plateZ: +$('op_plateZ').value || 0 }; saveLocal();
-}));
-function openpnpProject() {
+// Machine position: taught fiducials (fit in the page, same code as fit_fiducials.js), a reference grid hole, or none
+const degStr = (d) => (Math.abs(d) < 5e-4 ? 0 : d).toFixed(3); // no -0.000
+const opNum = (v) => (v === '' || v == null || !isFinite(+v) ? null : +v);
+function opFromForm() {
+  Object.assign(state.op, {
+    notInTray: $('op_notInTray').value, plateZ: +$('op_plateZ').value || 0, frame: $('op_frame').value, fidMode: $('op_fidMode').value,
+    boardZ: $('op_boardZ').value, fidPart: $('op_fidPart').value.trim(),
+  });
+  frameVis(); saveLocal(); fitSoon(); refreshChips();
+}
+['op_notInTray', 'op_plateZ', 'op_frame', 'op_fidMode', 'op_boardZ', 'op_fidPart'].forEach((id) => $(id).addEventListener('input', opFromForm));
+function frameVis() {
+  $('frameFids').style.display = state.op.frame === 'fids' ? '' : 'none';
+  $('frameHole').style.display = state.op.frame === 'hole' ? '' : 'none';
+}
+const boardFids = () => (state.pcb && state.pcb.parts ? state.pcb.parts.filter((q) => /fiducial/i.test(q.footprint)).map((q) => q.ref) : []);
+function fidTable() {
+  const tb = $('fidTable').querySelector('tbody');
+  tb.innerHTML = '';
+  const refs = boardFids();
+  if (!refs.length) { tb.innerHTML = '<tr><td colspan="4" class="muted">No fiducials on this board (open the .kicad_pcb)</td></tr>'; return; }
+  for (const ref of refs) {
+    const v = state.op.fids[ref] || {};
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td><b>${ref}</b></td><td><input type="number" step="0.001" data-k="x" value="${v.x != null ? v.x : ''}"></td><td><input type="number" step="0.001" data-k="y" value="${v.y != null ? v.y : ''}"></td><td class="muted" data-res="${ref}"></td>`;
+    tr.querySelectorAll('input').forEach((inp) => inp.addEventListener('input', () => {
+      const cur = state.op.fids[ref] || (state.op.fids[ref] = {});
+      cur[inp.dataset.k] = opNum(inp.value);
+      saveLocal(); fitSoon(); refreshChips();
+    }));
+    tb.appendChild(tr);
+  }
+}
+/** taught fiducials with both numbers, as fit_fiducials wants them */
+function taughtFids() {
+  const out = {};
+  for (const ref of boardFids()) { const v = state.op.fids[ref]; if (v && v.x != null && v.y != null) out[ref] = [v.x, v.y]; }
+  return out;
+}
+/** is the export going to be in machine coordinates? {ok, plate, msg} */
+function machineReady() {
+  const f = state.op.frame;
+  if (f === 'plate') return { ok: true, plate: true, msg: 'plate coordinates: every pick location is off by the same amount until you fit it' };
+  if (f === 'hole') {
+    const o = state.openpnp, h = o.hole && S.findHole(M, o.hole);
+    if (!h || opNum(o.x) == null || opNum(o.y) == null) return { ok: false, msg: 'Machine position: enter a reference hole and its machine X / Y (section 7), or pick taught fiducials' };
+    return { ok: true, msg: 'reference hole ' + o.hole };
+  }
+  const n = Object.keys(taughtFids()).length;
+  if (n < 2) return { ok: false, msg: `Machine position: enter X / Y for at least 2 fiducials (${n} so far), or pick another option in section 7` };
+  return { ok: true, msg: `${n} taught fiducials` };
+}
+/** project in plate coordinates (or through the reference hole), then the fiducial fit if that's the chosen frame */
+function openpnpBuild() {
   const o = state.openpnp;
-  return OP.project({
+  const prj = OP.project({
     m: M, pcb: state.pcb, place: state.place, sp: ES(), lines: state.tray.bom ? state.tray.bom.lines : null,
     trays: TRAYS && TRAYS.pk ? { pk: TRAYS.pk, pl: TRAYS.pl } : null, opulo: TRAYS && TRAYS.op ? { op: TRAYS.op, pl: TRAYS.pl } : null, tp: state.tray.tp,
-    ref: o.hole ? { hole: o.hole, x: +o.x || 0, y: +o.y || 0, flipX: o.flipX, flipY: o.flipY } : null,
+    ref: state.op.frame === 'hole' && o.hole ? { hole: o.hole, x: +o.x || 0, y: +o.y || 0, flipX: o.flipX, flipY: o.flipY } : null,
     plateZ: state.op.plateZ, notInTray: state.op.notInTray,
   });
+  let fit = null;
+  const taught = taughtFids();
+  if (state.op.frame === 'fids' && Object.keys(taught).length >= 2) {
+    const map = Object.fromEntries(prj.files.map((f) => [f.name, f.text]));
+    const r = FIT.fitProject(map, taught, { machine: state.op.fidMode === 'machine', z: opNum(state.op.boardZ), fidPart: state.op.fidPart || undefined });
+    prj.files = prj.files.map((f) => (r.files[f.name] != null ? { ...f, text: r.files[f.name] } : f));
+    prj.notes = prj.notes.filter((n) => !/No reference hole set/.test(n));
+    prj.notes.unshift(`Machine coordinates from ${r.fit.ids.length} taught fiducials: rotation ${degStr(r.fit.deg)}°, shift ${r.fit.t[0].toFixed(2)} / ${r.fit.t[1].toFixed(2)} mm, worst residual ${Math.max(...r.fit.residuals).toFixed(3)} mm; board Z ${r.job.z.toFixed(2)}.`);
+    fit = r.fit;
+  }
+  return { prj, fit };
+}
+/** fit readout next to the fiducial table (residual per fiducial) */
+let fitTimer = 0;
+const fitSoon = () => { clearTimeout(fitTimer); fitTimer = setTimeout(refreshFit, 200); };
+function refreshFit() {
+  const out = $('fidOut');
+  document.querySelectorAll('#fidTable [data-res]').forEach((td) => { td.textContent = ''; });
+  if (state.op.frame !== 'fids' || !state.pcb || !state.pcb.parts) { out.textContent = ''; return; }
+  const n = Object.keys(taughtFids()).length;
+  if (n < 2) { out.textContent = `Enter X / Y for at least 2 fiducials (3 is better) to get machine coordinates.`; return; }
+  try {
+    const { fit } = openpnpBuild();
+    fit.ids.forEach((id, i) => {
+      const td = document.querySelector(`#fidTable [data-res="${id}"]`);
+      if (td) { td.textContent = fit.residuals[i].toFixed(3); td.style.color = fit.residuals[i] > 0.2 ? css('--bad') : ''; }
+    });
+    const worst = Math.max(...fit.residuals);
+    out.innerHTML = `Rotation ${degStr(fit.deg)}°, shift ${fit.t[0].toFixed(2)} / ${fit.t[1].toFixed(2)} mm` +
+      (n < 3 ? ' (2 fiducials: no check on the fit)' : worst > 0.2 ? ` <span style="color:var(--bad)">· a fiducial is ${worst.toFixed(2)} mm off: taught on the wrong mark?</span>` : ' · fits');
+  } catch (err) { out.textContent = 'Fit failed: ' + err.message; }
+}
+/** the export's files, after the machine-position check (asks before writing plate coordinates). null = cancelled */
+function openpnpChecked() {
+  if (!state.pcb || !state.pcb.parts) { setStatus('Open the .kicad_pcb first (placements come from it)', 'bad'); return null; }
+  const ready = machineReady();
+  if (!ready.ok) { setStatus(ready.msg, 'bad'); $('op_frame').scrollIntoView({ block: 'center' }); return null; }
+  if (ready.plate && !confirm('No machine position is set (section 7), so the OpenPnP files will be in plate coordinates: every pick location is off by the same amount.\n\nExport anyway (and fit it later with fit_fiducials.js)?')) return null;
+  return openpnpBuild().prj;
 }
 $('opBtn').onclick = () => {
-  if (!state.pcb || !state.pcb.parts) return setStatus('Open the .kicad_pcb first (placements come from it)', 'bad');
   try {
-    const prj = openpnpProject();
+    const prj = openpnpChecked();
+    if (!prj) return;
     const enc = new TextEncoder(), dir = prj.name + '_openpnp/';
     download(`${prj.name}_openpnp.zip`, S.zipStore(prj.files.map((f) => ({ name: dir + f.name, data: enc.encode(f.text) }))), 'application/zip');
     $('opNotes').innerHTML = prj.notes.map((n) => '• ' + n.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('<br>');
-    setStatus(`✓ OpenPnP project: ${prj.counts.place} to place, ${prj.counts.ignore} ignored, ${prj.counts.fid} fiducials, ${prj.feeders.length} feeders`, 'ok');
+    setStatus(`✓ OpenPnP project (${machineReady().msg}): ${prj.counts.place} to place, ${prj.counts.ignore} ignored, ${prj.counts.fid} fiducials, ${prj.feeders.length} feeders`, 'ok');
   } catch (err) { setStatus('OpenPnP export failed: ' + err.message, 'bad'); }
 };
+
+// ------------------------------------------------------------ export everything
+$('allBtn').onclick = () => {
+  if (!window.jscadModeling) return setStatus('JSCAD did not load (vendor/jscad-modeling.min.js)', 'bad');
+  let prj = null;
+  if (state.pcb && state.pcb.parts) { prj = openpnpChecked(); if (!prj) return; }
+  setStatus('Building everything…', '');
+  setTimeout(() => {
+    try {
+      const enc = (str) => new TextEncoder().encode(str), j = window.jscadModeling, sp = ES();
+      const base = baseName(), dir = base + '/', files = [], have = [];
+      if (RES && RES.stands.length) {
+        RES.stands.forEach((st) => files.push({ name: `${dir}stands/${st.num}_${String(st.ref).replace(/[^\w.-]+/g, '_')}.stl`, data: new Uint8Array(S.stlBinary(S.printLayout([st], sp, j), j)) }));
+        have.push(`${RES.stands.length} stand STLs${RES.ok ? '' : ' (placement has problems!)'}`);
+      }
+      if (TRAYS && TRAYS.pk) {
+        TRAYS.pk.trays.forEach((t, i) => { const p = TRAYS.pl[i]; if (p && p.ok) files.push({ name: `${dir}trays/tray${t.num}.stl`, data: new Uint8Array(S.stlBinary([TR.traySolid(t, p, state.tray.tp, sp, j)], j)) }); });
+        files.push({ name: `${dir}setup.csv`, data: enc(TR.sectionsCsv(state.tray.bom.lines, TRAYS.pk, TRAYS.pl)) });
+        have.push(`${TRAYS.pk.trays.length} tray STLs + setup.csv`);
+      } else if (TRAYS && TRAYS.op) {
+        files.push({ name: `${dir}setup.csv`, data: enc(TR.opuloCsv(state.tray.bom.lines, TRAYS.op, TRAYS.pl)) });
+        have.push('Opulo feeder setup.csv');
+      }
+      if (RES) { files.push({ name: `${dir}sheet.html`, data: enc(`<!doctype html><meta charset="utf-8"><title>${base}</title><style>body{font:13px system-ui;margin:12mm}table{border-collapse:collapse}td,th{border-bottom:1px solid #ccc;padding:2px 6px;text-align:left}</style>${sheetHtml()}`) }); have.push('sheet.html'); }
+      if (prj) { prj.files.forEach((f) => files.push({ name: `${dir}openpnp/${f.name}`, data: enc(f.text) })); have.push(`OpenPnP project (${machineReady().msg})`); }
+      files.push({ name: `${dir}${base}_project.json`, data: enc(JSON.stringify(state, null, 1)) });
+      download(`${base}_all.zip`, S.zipStore(files), 'application/zip');
+      setStatus(`✓ ${base}_all.zip: ${have.join(', ')}, project JSON`, 'ok');
+    } catch (err) { setStatus('Export failed: ' + err.message, 'bad'); }
+  }, 20);
+};
+
+// ------------------------------------------------------------ status chips (one per step, click to jump)
+function refreshChips() {
+  const box = $('chips');
+  if (!box || !M) return;
+  const secs = [...document.querySelectorAll('aside > details')];
+  const mr = state.pcb && state.pcb.parts ? machineReady() : null;
+  const placed = TRAYS ? TRAYS.pl.filter((q) => q && q.ok).length : 0, total = TRAYS ? (TRAYS.op ? TRAYS.op.feeders.length : TRAYS.pk.trays.length) : 0;
+  const chips = [
+    { t: 'Board', s: state.pcb ? 'ok' : '', sec: 1, tip: state.pcb ? state.pcb.name : 'open a .kicad_pcb' },
+    { t: 'Stands', s: !RES ? '' : RES.ok ? 'ok' : 'bad', sec: 3, tip: !RES ? '' : RES.ok ? `${RES.stands.length} fit` : RES.problems[0] },
+    { t: 'BOM', s: state.tray.bom ? 'ok' : '', sec: 5, tip: state.tray.bom ? state.tray.bom.name : 'open a BOM or DigiKey order' },
+    { t: isOpulo() ? 'Feeders' : 'Trays', s: !TRAYS ? '' : placed === total && total ? 'ok' : 'bad', sec: 5, tip: TRAYS ? `${placed} of ${total} placed` : '' },
+    { t: 'Machine position', s: !mr ? '' : !mr.ok ? 'bad' : mr.plate ? 'warn' : 'ok', sec: 6, tip: mr ? mr.msg : 'needs the board' },
+  ];
+  box.innerHTML = '';
+  for (const c of chips) {
+    const b = document.createElement('span');
+    b.className = 'chip ' + c.s;
+    b.textContent = (c.s === 'ok' ? '✓ ' : c.s === 'bad' ? '✗ ' : c.s === 'warn' ? '⚠ ' : '○ ') + c.t;
+    b.title = c.tip || '';
+    b.onclick = () => { const d = secs[c.sec]; if (d) { d.open = true; d.scrollIntoView({ block: 'start', behavior: 'smooth' }); } };
+    box.appendChild(b);
+  }
+}
+
+// ------------------------------------------------------------ info icons: hover / focus shows the text in one floating box
+function infoIcons() {
+  // long field titles become an i next to the field name, so the help is findable (a title only shows on a slow hover)
+  document.querySelectorAll('aside label').forEach((lab) => {
+    const ctl = lab.querySelector('input[title], select[title]'), span = lab.querySelector(':scope > span');
+    if (!ctl || !span || ctl.title.length < 40 || span.querySelector('.info')) return;
+    const i = document.createElement('span');
+    i.className = 'info'; i.tabIndex = 0; i.textContent = 'i'; i.dataset.tip = ctl.title.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    ctl.removeAttribute('title');
+    span.appendChild(i);
+  });
+  const box = $('tipBox');
+  const show = (el) => {
+    box.innerHTML = el.dataset.tip; box.style.display = 'block';
+    const r = el.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight;
+    box.style.left = Math.max(6, Math.min(window.innerWidth - w - 6, r.left - 8)) + 'px';
+    box.style.top = (r.bottom + 6 + h > window.innerHeight ? r.top - h - 6 : r.bottom + 6) + 'px';
+  };
+  const hide = () => { box.style.display = 'none'; };
+  document.addEventListener('mouseover', (e) => { const el = e.target.closest && e.target.closest('.info'); if (el) show(el); });
+  document.addEventListener('mouseout', (e) => { if (e.target.closest && e.target.closest('.info')) hide(); });
+  document.addEventListener('focusin', (e) => { if (e.target.classList && e.target.classList.contains('info')) show(e.target); });
+  document.addEventListener('focusout', hide);
+  // an i inside a <summary> must not toggle the section
+  document.querySelectorAll('summary .info').forEach((el) => el.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); show(el); }));
+}
 
 // ------------------------------------------------------------ machine form events
 $('profile').addEventListener('change', (e) => {
@@ -1158,17 +1356,20 @@ function initForms() {
   $('originSel').value = o.origin; $('refHole').value = o.hole; $('refX').value = o.x; $('refY').value = o.y;
   $('flipX').checked = o.flipX; $('flipY').checked = o.flipY;
   trayFormFromState();
-  $('op_notInTray').value = state.op.notInTray; $('op_plateZ').value = state.op.plateZ;
+  $('op_notInTray').value = state.op.notInTray; $('op_plateZ').value = state.op.plateZ; $('op_frame').value = state.op.frame;
+  $('op_fidMode').value = state.op.fidMode; $('op_boardZ').value = state.op.boardZ; $('op_fidPart').value = state.op.fidPart; frameVis();
 }
 
 // ------------------------------------------------------------ boot
 loadLocal();
+infoIcons();
 try { const t = localStorage.getItem(LS_KEY + '.theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) { /* ignore */ }
 initForms();
 M = S.buildMachine(state.cfg);
 reparseKeepouts();
 drawStatic();
 holeTable();
+fidTable();
 fit();
 update();
 repackTrays(false); // after update(): placement needs the stands
