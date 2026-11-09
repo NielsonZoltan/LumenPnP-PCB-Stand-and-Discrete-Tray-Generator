@@ -115,13 +115,15 @@
 
   /** ReferenceStripFeeder for one tray section (machine coordinates) */
   function stripFeederXml(f) {
-    return `         <feeder class="org.openpnp.machine.reference.feeder.ReferenceStripFeeder" version="1.1" id="${esc(f.id)}" name="${esc(f.name)}" enabled="true" part-id="${esc(f.partId)}" feed-retry-count="3" pick-retry-count="0" feed-options="Normal" tape-type="${f.tapeType}" standard-eia-481="true" vision-enabled="true" feed-count="0" max-feed-count="0">\n` +
+    return `         <feeder class="org.openpnp.machine.reference.feeder.ReferenceStripFeeder" version="1.1" id="${esc(f.id)}" name="${esc(f.name)}" enabled="true" part-id="${esc(f.partId)}" feed-retry-count="3" pick-retry-count="0" tape-type="${f.tapeType}" standard-eia-481="true" vision-enabled="true" feed-count="0" max-feed-count="0">\n` +
       `            <location units="Millimeters" x="0.0" y="0.0" z="${n3(f.z)}" rotation="${n3(f.rot)}"/>\n` +
       `            <reference-hole-location units="Millimeters" x="${n3(f.ref.x)}" y="${n3(f.ref.y)}" z="${n3(f.z)}" rotation="0.0"/>\n` +
       `            <last-hole-location units="Millimeters" x="${n3(f.last.x)}" y="${n3(f.last.y)}" z="${n3(f.z)}" rotation="0.0"/>\n` +
       `            <part-pitch value="${f.pitch}" units="Millimeters"/>\n            <tape-width value="${f.tapeW}" units="Millimeters"/>\n` +
       `            ${STRIP_PIPELINE}\n` +
-      `            <extrapolation-distance value="0.0" units="Millimeters"/>\n            <parallax-diameter value="0.0" units="Millimeters"/>\n            <parallax-angle>0.0</parallax-angle>\n         </feeder>`;
+      // only fields OpenPnP 2023-04-05 (0aa4ae8, the LumenPnP host) also has: no feed-options, extrapolation-distance,
+      // parallax-* (later additions; all optional, defaults are the same)
+      `         </feeder>`;
   }
 
   // ------------------------------------------------------------------ project
@@ -225,7 +227,8 @@
       `  python merge_into_openpnp.py            -> ~/.openpnp2 (backup made first: *.bak-<time>)`,
       `  python merge_into_openpnp.py <config dir>`,
       `  python merge_into_openpnp.py --undo      -> put back the files from the newest backup`,
-      `  It adds or replaces these parts and packages by id, and replaces every feeder whose id starts with PLAN-.`,
+      `  It adds these parts and packages by id (one the machine already has is kept, unless an earlier run added it or`,
+      `  --replace-existing is given), and replaces every feeder whose id starts with PLAN-.`,
       `  Nothing else in machine.xml is touched. Run it again after re-exporting.`,
       `Then: File > Open Job > ${name}.job.xml.`,
       ``,
@@ -242,16 +245,19 @@
   const MERGE_PY = String.raw`"""Merge the generated parts, packages and PLAN- strip feeders into an OpenPnP config (OpenPnP must be closed).
 
     python merge_into_openpnp.py [config dir]      (default: ~/.openpnp2)
-    python merge_into_openpnp.py --undo [config dir]   restore the files from the newest backup
+    python merge_into_openpnp.py --undo [config dir]   undo the last run (again: the run before it, ...)
+    python merge_into_openpnp.py --replace-existing     also overwrite parts / packages the machine already had
 
-Parts and packages are added or replaced by id; every feeder with an id starting with PLAN- is replaced by the ones in
-feeders.xml. A copy of each file is saved as <file>.bak-<time> first. Nothing else is changed.
+Parts and packages are added by id. One that already exists in the config is left alone (the machine's own, tuned
+there), unless an earlier run of this script added it (listed in pnp_stand_ids.txt in the config dir) or
+--replace-existing is given. Every feeder with an id starting with PLAN- is replaced by the ones in feeders.xml.
+A copy of each file is saved as <file>.bak-<time> first. Nothing else is changed.
 """
 import re, shutil, sys, time
 from pathlib import Path
 
 here = Path(__file__).resolve().parent
-args = [a for a in sys.argv[1:] if a != "--undo"]
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
 do_undo = "--undo" in sys.argv[1:]
 cfg = Path(args[0]) if args else Path.home() / ".openpnp2"
 stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -261,21 +267,41 @@ def backup(p):
     shutil.copy2(p, p.with_name(p.name + ".bak-" + stamp))
 
 
-def merge_lib(fname, tag, root):
+MANIFEST = cfg / "pnp_stand_ids.txt"  # "<tag> <id>" per line: what this script added, so only those get replaced later
+replace_existing = "--replace-existing" in sys.argv[1:]
+
+
+def load_manifest():
+    return set(MANIFEST.read_text(encoding="utf-8").splitlines()) if MANIFEST.exists() else set()
+
+
+def merge_lib(fname, tag, root, mine):
     new = (here / fname).read_text(encoding="utf-8")
     items = re.findall(r"(<%s\s[^>]*?(?:/>|>[\s\S]*?</%s>))" % (tag, tag), new)
     dst = cfg / fname
     text = dst.read_text(encoding="utf-8") if dst.exists() else "<%s>\n</%s>\n" % (root, root)
     if dst.exists():
         backup(dst)
+    text = text.replace("<%s/>" % root, "<%s>\n</%s>" % (root, root))
+    added, updated, kept = 0, 0, []
     for it in items:
         pid = re.search(r'(?<=\s)id="([^"]*)"', it).group(1)
         # (?<=\s)id= : the attribute id, not part-id / package-id; works with id first or later in the tag
-        text, n = re.subn(r"\s*<%s\s[^>]*?(?<=\s)id=\"%s\"[^>]*?(?:/>|>[\s\S]*?</%s>)" % (tag, re.escape(pid), tag), "", text)
+        pat = r"\s*<%s\s[^>]*?(?<=\s)id=\"%s\"[^>]*?(?:/>|>[\s\S]*?</%s>)" % (tag, re.escape(pid), tag)
+        if re.search(pat, text):
+            if "%s %s" % (tag, pid) not in mine and not replace_existing:
+                kept.append(pid)  # the machine's own entry (tuned there): leave it alone
+                continue
+            text = re.sub(pat, "", text)
+            updated += 1
+        else:
+            added += 1
+        mine.add("%s %s" % (tag, pid))
         text = text.replace("</%s>" % root, "   %s\n</%s>" % (it, root), 1)
-    text = text.replace("<%s/>" % root, "<%s>\n</%s>" % (root, root)) if "<%s/>" % root in text else text
     dst.write_text(text, encoding="utf-8")
-    print("%s: %d %s(s) added or replaced" % (dst, len(items), tag))
+    print("%s: %d %s(s) added, %d updated (added by an earlier run)" % (dst, added, tag, updated))
+    if kept:
+        print("  kept the machine's own %s(s), not replaced: %s" % (tag, ", ".join(kept)))
 
 
 def merge_feeders():
@@ -298,15 +324,17 @@ def merge_feeders():
 
 def undo():
     # restore the newest backup set (all files of one run share the same stamp)
-    baks = sorted(cfg.glob("*.xml.bak-*"), key=lambda p: p.name.rsplit(".bak-", 1)[1])
+    baks = sorted(cfg.glob("*.bak-*"), key=lambda p: p.name.rsplit(".bak-", 1)[1])
     if not baks:
         sys.exit("no *.bak-<time> files in %s: nothing to undo" % cfg)
     last = baks[-1].name.rsplit(".bak-", 1)[1]
     for b in baks:
         if b.name.endswith(".bak-" + last):
             shutil.copy2(b, cfg / b.name.rsplit(".bak-", 1)[0])
+            # used up: renamed (kept), so the next --undo steps back one more run
+            b.rename(b.with_name(b.name.replace(".bak-", ".undone-")))
             print("restored %s from %s" % (b.name.rsplit(".bak-", 1)[0], b.name))
-    print("Undone (backups kept). Start OpenPnP.")
+    print("Undone one run (backup kept as *.undone-%s). Run --undo again to go back further. Start OpenPnP." % last)
 
 
 if __name__ == "__main__":
@@ -315,9 +343,13 @@ if __name__ == "__main__":
     if do_undo:
         undo()
         sys.exit(0)
-    merge_lib("parts.xml", "part", "openpnp-parts")
-    merge_lib("packages.xml", "package", "openpnp-packages")
+    mine = load_manifest()
+    # the id list is backed up too (empty if this is the first run), so --undo forgets what it added
+    MANIFEST.with_name(MANIFEST.name + ".bak-" + stamp).write_text("\n".join(sorted(mine)), encoding="utf-8")
+    merge_lib("parts.xml", "part", "openpnp-parts", mine)
+    merge_lib("packages.xml", "package", "openpnp-packages", mine)
     merge_feeders()
+    MANIFEST.write_text("\n".join(sorted(mine)), encoding="utf-8")
     print("Done. Start OpenPnP and open the .job.xml.")
 `;
 

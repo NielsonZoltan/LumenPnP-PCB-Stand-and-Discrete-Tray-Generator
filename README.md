@@ -50,8 +50,9 @@ Open `pnp_stand.html` in a browser (double-click it; it works offline). Open `pn
 7. **OpenPnP project** (OpenPnP 2.4): a .zip with `<board>.board.xml` (placements from the .kicad_pcb, origin = board
    lower-left, fiducials kept), `<board>.job.xml` (board location from this placement), `parts.xml` / `packages.xml` (one
    part per BOM line, id = footprint-value, body size, height, Opulo nozzle tip), `feeders.xml` (a ReferenceStripFeeder
-   `PLAN-<line>` per tray section) and `merge_into_openpnp.py`. With OpenPnP closed, the script adds or replaces those
-   parts, packages and PLAN- feeders in `~/.openpnp2` (backup first); run it again after every re-export. Lines not in a
+   `PLAN-<line>` per tray section) and `merge_into_openpnp.py`. With OpenPnP closed, the script adds those
+   parts and packages (one the machine already has is kept: it was tuned there; only ids the script added itself,
+   listed in `pnp_stand_ids.txt` in the config dir, get updated) and replaces the PLAN- feeders in `~/.openpnp2` (backup first); run it again after every re-export. Lines not in a
    tray are set to Ignore (hand place) or Place. Set the reference hole in section 5 for machine X/Y, and the plate Z;
    everything is a ballpark to teach on the machine. `python3 merge_into_openpnp.py --undo` puts back the files from the
    newest backup.
