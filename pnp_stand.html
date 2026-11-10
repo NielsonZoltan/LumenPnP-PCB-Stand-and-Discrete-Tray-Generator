@@ -1354,7 +1354,8 @@ function frameVis() {
   $('frameFids').style.display = state.op.frame === 'fids' ? '' : 'none';
   $('frameHole').style.display = state.op.frame === 'hole' ? '' : 'none';
 }
-const boardFids = () => (state.pcb && state.pcb.parts ? state.pcb.parts.filter((q) => /fiducial/i.test(q.footprint)).map((q) => q.ref) : []);
+// in number order (FIDP1, FIDP2, …), not board-file order, so values typed top to bottom land on the right fiducial
+const boardFids = () => (state.pcb && state.pcb.parts ? state.pcb.parts.filter((q) => /fiducial/i.test(q.footprint)).map((q) => q.ref).sort((x, y) => x.localeCompare(y, undefined, { numeric: true })) : []);
 function fidTable() {
   const tb = $('fidTable').querySelector('tbody');
   tb.innerHTML = '';
