@@ -26,8 +26,37 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--bg); color: var(--ink); font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-.app { display: grid; grid-template-columns: 360px 1fr; height: 100vh; }
-aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 10px 14px 40px; }
+.app { display: grid; grid-template-columns: 330px 1fr 340px; grid-template-rows: auto 1fr; grid-template-areas: "top top top" "left main right"; height: 100vh; }
+.topbar { grid-area: top; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.topbar .brand { font-weight: 700; font-size: 14px; display: inline-flex; align-items: center; }
+.tgroup { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding-left: 12px; border-left: 1px solid var(--line); }
+.topbar .brand + .tgroup { border-left: 0; padding-left: 0; }
+.topbar select { max-width: 170px; }
+.topbar .chips { margin: 0 0 0 auto; }
+aside { background: var(--panel); overflow-y: auto; padding: 6px 12px 40px; }
+#left { grid-area: left; border-right: 1px solid var(--line); }
+#right { grid-area: right; border-left: 1px solid var(--line); padding-top: 0; }
+main { grid-area: main; }
+details.adv { border-top: 1px dashed var(--line); margin-top: 4px; }
+.rtabs { position: sticky; top: 0; z-index: 2; display: flex; gap: 2px; background: var(--panel); padding: 6px 0; border-bottom: 1px solid var(--line); }
+.rtabs button { flex: 1; border-radius: 6px 6px 0 0; }
+.rtabs button.on { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.objlist { margin: 6px 0; border: 1px solid var(--line); border-radius: 6px; max-height: 38vh; overflow-y: auto; }
+.obj { display: flex; align-items: center; gap: 6px; padding: 3px 8px; cursor: pointer; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.obj:last-child { border-bottom: 0; }
+.obj.grp { font-weight: 600; background: var(--bg); }
+.obj.kid { padding-left: 22px; }
+.obj:hover { background: var(--bg); }
+.obj.sel { background: var(--accent); color: var(--accent-ink); }
+.obj .st { margin-left: auto; font-size: 11px; }
+.obj.sel .st { color: inherit; }
+.obj .dot { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.props h2 { font-size: 14px; margin: 10px 0 4px; }
+.pblock { display: none; }
+.pblock.show { display: block; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; margin: 4px 0; }
+.kv > :nth-child(odd) { color: var(--muted); }
+#rParts { padding-top: 6px; }
 main { position: relative; overflow: hidden; display: flex; flex-direction: column; }
 h1 { font-size: 16px; margin: 4px 0 2px; }
 .sub { color: var(--muted); margin: 0 0 8px; }
@@ -71,12 +100,18 @@ td input[type=number] { width: 58px; }
 .chip.bad { color: var(--bad); border-color: var(--bad); }
 .frame { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; margin: 4px 0; }
 #fidTable input[type=number] { width: 72px; }
+@media (max-width: 1200px) {
+  .app { grid-template-columns: 300px 1fr; grid-template-rows: auto 70vh auto; grid-template-areas: "top top" "left main" "right right"; height: auto; min-height: 100vh; }
+  #left { max-height: 70vh; }
+  #right { border-left: 0; border-top: 1px solid var(--line); }
+}
 @media (max-width: 800px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto 70vh; height: auto; }
-  aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 16px; }
+  .app { grid-template-columns: 1fr; grid-template-rows: auto auto 70vh auto; grid-template-areas: "top" "left" "main" "right"; }
+  #left { max-height: none; border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 16px; }
+  .tgroup { border-left: 0; padding-left: 0; }
 }
 @media print {
-  aside, .toolbar, .legend, #tipBox { display: none !important; }
+  aside, .topbar, .toolbar, .legend, #tipBox { display: none !important; }
   .app { display: block; height: auto; }
   main { overflow: visible; }
   #view { height: 120mm; }
@@ -86,14 +121,29 @@ td input[type=number] { width: 58px; }
 </head>
 <body>
 <div class="app">
-<aside>
-  <h1>LumenPnP stand generator</h1>
-  <p class="sub">Stands, cut-tape holders and an OpenPnP starter for the LumenPnP staging plates.<span class="info" tabindex="0" data-tip="Work top to bottom: machine, board, stands, placement, then cut tape (our printed trays or Opulo tray feeders) and the OpenPnP project. Hover an <b>i</b> for details. Everything is saved in this browser; <i>Save project</i> moves it to another computer.">i</span></p>
+<header class="topbar">
+  <span class="brand">LumenPnP stands<span class="info" tabindex="0" data-tip="Stands, cut-tape holders and an OpenPnP starter for the LumenPnP staging plates. <b>Left</b>: setup (machine, board, stand, cut tape, machine position). <b>Middle</b>: the plates: drag the board, a tray or a feeder, click anything to see it on the right. <b>Right</b>: what's on the plates and its properties; <i>Parts</i> is the BOM. Everything is saved in this browser; <i>Save</i> writes a project file for another computer.">i</span></span>
+  <div class="tgroup">
+    <button id="openPcb" title="Open a .kicad_pcb">📂 Board</button><input type="file" id="pcbFile" accept=".kicad_pcb" hidden>
+    <button id="openBom" title="KiCad BOM CSV (Qty per board), or a DigiKey order CSV (Qty = what you ordered; needs the .kicad_pcb open)">📂 BOM / order</button><input type="file" id="bomFile" accept=".csv" hidden>
+    <button id="loadBtn" title="Open a project file (.json)">📂 Project</button><input type="file" id="loadFile" accept=".json" hidden>
+    <button id="saveBtn" title="Save the project file (.json): board, stands, BOM, trays / feeders, machine position">💾 Save</button>
+    <select id="recentSel" title="Layouts saved in this browser, one per board"></select><span class="info" tabindex="0" data-tip="<b>This browser</b> keeps every board’s layout on its own (board, stands, BOM, trays / feeders, machine position, taught fiducials), saved as you go: pick one under <i>saved boards</i>, and opening a .kicad_pcb you laid out before offers its layout back. <b>Project file</b> (.json): the same thing as a file, to move to another computer or keep next to the board in the repo (e.g. <code>hardware/monk/openpnp/monk_panel_project.json</code>).">i</span>
+  </div>
+  <div class="tgroup">
+    <button class="primary" id="autoBtn" title="Place the board where its stands fit (rotations and preference: select the board)">Auto-place board</button>
+    <button id="trayPackBtn" title="Repack the sections and auto-place every tray / feeder (forgets ones you moved)">Pack + place feeders</button>
+  </div>
+  <div class="tgroup">
+    <button class="printMap" title="Placement map + loading list (letter landscape): grid holes for stands and trays / feeders, which strip goes where">🖨 Print map</button>
+    <button id="opBtn" title="OpenPnP starter project (.zip); needs a machine position (left, 5)">OpenPnP (.zip)</button>
+    <button id="allBtn" title="One zip: stand STLs, tray STLs (trays), setup CSV, print sheet, OpenPnP project, project JSON">Export everything</button>
+  </div>
   <div class="chips" id="chips"></div>
-  <div class="row" style="align-items:center"><button id="saveBtn">Save project file</button><button id="loadBtn">Open project file</button><button class="printMap" title="Placement map + loading list (letter landscape): grid holes for stands and trays / feeders, which strip goes where">🖨 Print map</button><input type="file" id="loadFile" accept=".json" hidden><span class="info" tabindex="0" data-tip="<b>This browser</b> keeps every board’s layout on its own (board, stands, BOM, trays / feeders, machine position, taught fiducials), saved as you go: pick one under <i>saved boards</i>, and opening a .kicad_pcb you laid out before offers its layout back. <b>Project file</b> (.json): the same thing as a file, to move to another computer or keep next to the board in the repo (e.g. <code>hardware/monk/openpnp/monk_panel_project.json</code>).">i</span></div>
-  <select id="recentSel" style="max-width:100%;margin-bottom:6px"></select>
+</header>
 
-  <details open>
+<aside id="left">
+  <details>
     <summary>1 · Machine</summary>
     <label><span>Profile</span><select id="profile"></select></label>
     <label><span>Plates</span><select id="nPlates"><option>1</option><option selected>2</option><option>3</option></select></label>
@@ -116,8 +166,7 @@ td input[type=number] { width: 58px; }
   </details>
 
   <details open>
-    <summary>2 · PCB</summary>
-    <div class="row"><button class="primary" id="openPcb">Open .kicad_pcb…</button><input type="file" id="pcbFile" accept=".kicad_pcb" hidden></div>
+    <summary>2 · Board</summary>
     <label><span>Min hole ⌀ on import</span><input type="number" id="minDrill" value="1.0" step="0.1"></label>
     <div class="row">
       <label style="margin:0"><span>W</span><input type="number" id="manW" value="80" step="0.1"></label>
@@ -134,19 +183,21 @@ td input[type=number] { width: 58px; }
   </details>
 
   <details open>
-    <summary>3 · Stand</summary>
+    <summary>3 · Stands</summary>
     <label><span>Height: plate → PCB bottom</span><input type="number" id="sp_height" step="0.5"></label>
     <label><span>Bolts per stand</span><select id="sp_bolts"><option value="2">2 (angle locked)</option><option value="1">1 (can swing)</option></select></label>
     <label><span>Top of bolt hole</span><select id="sp_pocket"><option value="hex">hex nut trap</option><option value="round">screw-head counterbore</option><option value="none">plain hole</option></select></label>
     <label><span>Bolt size preset</span><select id="boltPreset" title="Fills clearance, nut and head sizes (stands and tray caps). Then fine-tune the fields below"><option value="">– pick to fill –</option></select></label>
+    <label><span>Floor under nut</span><input type="number" id="sp_pocketFloor" step="0.05" min="0.4" title="Plastic left under the nut (or screw head). The pocket fills the body above it, so it is body top − this"></label>
+    <label><span>PCB fixing</span><select id="sp_iface"><option value="pin">printed locating pin</option><option value="hole">blind hole (dowel / screw / insert)</option></select></label>
+    <label><span>Clearance under board</span><input type="number" id="sp_underClear" step="0.5" min="0" title="Tallest part on the side facing the plate, e.g. the top-side parts when placing the bottom side. Raises the step-up (and the height if needed)"></label>
+    <details class="adv">
+      <summary class="muted">Advanced</summary>
     <label><span>Bolt clearance ⌀</span><input type="number" id="sp_boltD" step="0.1"></label>
     <label><span>Nut across flats</span><input type="number" id="sp_nutAF" step="0.1"></label>
     <label><span>Nut height</span><input type="number" id="sp_nutH" step="0.1" min="0" title="Checked against the pocket depth (warns if the nut sticks out); tray caps are floor + this tall"></label>
     <label><span>Head ⌀</span><input type="number" id="sp_headD" step="0.1"></label>
-    <label><span>Floor under nut</span><input type="number" id="sp_pocketFloor" step="0.05" min="0.4" title="Plastic left under the nut (or screw head). The pocket fills the body above it, so it is body top − this"></label>
     <label><span>Pocket clearance</span><input type="number" id="sp_pocketClr" step="0.05"></label>
-    <label><span>PCB fixing</span><select id="sp_iface"><option value="pin">printed locating pin</option><option value="hole">blind hole (dowel / screw / insert)</option></select></label>
-    <label><span>Clearance under board</span><input type="number" id="sp_underClear" step="0.5" min="0" title="Tallest part on the side facing the plate, e.g. the top-side parts when placing the bottom side. Raises the step-up (and the height if needed)"></label>
     <label><span>Step-up (body below PCB by)</span><input type="number" id="sp_stepH" step="0.5" min="0" title="Only the boss under the pin (or the corner pad) reaches the PCB; the rest of the body is this much lower. 0 = flat top"></label>
     <label><span>Boss ⌀ under pin (0 = auto)</span><input type="number" id="sp_bossD" step="0.1" min="0"></label>
     <label><span>Pin clearance (radial)</span><input type="number" id="sp_pinClr" step="0.05"></label>
@@ -167,45 +218,12 @@ td input[type=number] { width: 58px; }
     <label><span>L-wall thickness</span><input type="number" id="sp_cornerWall" step="0.1"></label>
     <label><span>L-wall top below board top</span><input type="number" id="sp_lipBelow" step="0.1"></label>
     <div class="row"><button id="spReset" title="Back to the built-in defaults (our stand: 8.6 mm riser, 6.14 mm body, 5.34 mm nut, 1.93 mm under it). Keeps the board thickness.">Reset stand to defaults</button></div>
+    </details>
   </details>
 
   <details open>
-    <summary>4 · Placement</summary>
-    <div class="row">
-      <label style="margin:0"><span>X</span><input type="number" id="pX" step="0.5"></label>
-      <label style="margin:0"><span>Y</span><input type="number" id="pY" step="0.5"></label>
-      <button id="rotBtn" title="R">Rotate 90°</button>
-    </div>
-    <label><span>Side up</span><select id="sideUp"><option value="top">top (1st pass)</option><option value="bottom">bottom (2nd pass, board flipped)</option></select></label>
-    <label><span>Snap while dragging (mm)</span><input type="number" id="snap" value="0.5" step="0.5" min="0"></label>
-    <label><span>Auto-place prefers</span>
-      <select id="prefer">
-        <option value="here">near where the board is now</option>
-        <option value="camera">near the bottom camera</option>
-        <option value="front-left">front-left corner</option>
-        <option value="any">shortest stands, anywhere</option>
-      </select></label>
-    <div class="row" id="rotAllowed"></div>
-    <div class="row"><button class="primary" id="autoBtn">Auto-place</button><button id="refineBtn" title="Search ±40 mm around the board, 0.5 mm steps">Refine here</button></div>
-    <div id="placeStatus"></div>
-    <div id="standList" class="out" style="margin-top:6px"></div>
-  </details>
-
-  <details open>
-    <summary>5 · Export stands</summary>
-    <div class="row">
-      <button class="primary" id="stlBtn" title="A .zip with a folder holding one STL per stand, named number_ref">Stands (.zip, one STL each)</button>
-      <button id="stlAllBtn" title="All stands laid out side by side in a single STL">All in one STL</button>
-      <button id="scadBtn">OpenSCAD</button>
-      <button id="printBtn" class="printMap">🖨 Print map</button>
-    </div>
-    <div class="row" id="perStand"></div>
-  </details>
-
-  <details open>
-    <summary>6 · Cut tape<span class="info" tabindex="0" data-tip="One BOM line per reel (grouped by value + footprint like <code>bom_reels.py</code>). Each line gets a section of cut tape: (parts + empty pockets) × pitch. <b>Our trays</b>: sections share lanes, lanes share trays, printed here. <b>Opulo tray feeders</b>: sections go end to end in the channels of Opulo’s printed feeders (8 / 12 mm: 3 channels) with a gap between them, busiest feeders nearest the bottom camera; OpenPnP gets one tray feeder per section. Drag a tray or feeder to move it.">i</span></summary>
+    <summary>4 · Cut tape<span class="info" tabindex="0" data-tip="One BOM line per reel (grouped by value + footprint like <code>bom_reels.py</code>). Each line gets a section of cut tape: (parts + empty pockets) × pitch. <b>Our trays</b>: sections share lanes, lanes share trays, printed here. <b>Opulo tray feeders</b>: sections go end to end in the channels of Opulo’s printed feeders (8 / 12 mm: 3 channels) with a gap between them, busiest feeders nearest the bottom camera; OpenPnP gets one tray feeder per section. Drag a tray or feeder to move it.">i</span></summary>
     <label><span>Holder</span><select id="tp_holder"><option value="tray">our cut-tape trays (printed here)</option><option value="opulo">Opulo LumenPnP printed tray feeders</option></select></label>
-    <div class="row"><button class="primary" id="openBom" title="KiCad BOM CSV (Qty per board), or a DigiKey order CSV (Qty = what you ordered; needs the .kicad_pcb open)">Open BOM / DigiKey order .csv…</button><input type="file" id="bomFile" accept=".csv" hidden></div>
     <div id="bomInfo" class="muted"></div>
     <label><span>Boards per run</span><input type="number" id="tp_boards" step="1" min="1"></label>
     <label><span>Spare parts per line</span><input type="number" id="tp_spares" step="1" min="0"></label>
@@ -243,14 +261,10 @@ td input[type=number] { width: 58px; }
     </details>
     </div>
     <label><span>Clearance to other things</span><input type="number" id="tp_gap" step="0.5"></label>
-    <div style="overflow-x:auto"><table id="lineTable"><thead><tr><th title="in a tray / feeder (untick = hand place)">use</th><th>#</th><th>value</th><th>qty</th><th>parts</th><th title="tray / lane, or Opulo feeder / channel @ mm from the first end">where</th><th>tape</th><th>pitch</th><th>carrier</th></tr></thead><tbody></tbody></table></div>
-    <div class="row"><button class="primary" id="trayPackBtn" title="Repack the sections and auto-place every tray (forgets trays you moved)">Pack + place trays</button><button id="trayZipBtn" title="One STL per tray and sections.csv in a .zip">Trays (.zip)</button><button id="trayCsvBtn" title="Which line goes where (sections / feeder strips)">Setup CSV</button><button class="printMap" title="Placement map + loading list (letter landscape)">🖨 Print map</button></div>
-    <div id="trayStatus"></div>
-    <div id="trayList" class="out" style="margin-top:6px"></div>
   </details>
 
   <details open>
-    <summary>7 · OpenPnP project<span class="info" tabindex="0" data-tip="Starter files for OpenPnP (2023 build and 2.4): board (placements + fiducials from the .kicad_pcb), job (board location), parts + packages (one per BOM line), a feeder per tray section / Opulo section, and <code>merge_into_openpnp.py</code> (backs up first; <code>--undo</code>). Pick locations are ballparks: check each on the machine.">i</span></summary>
+    <summary>5 · Machine position / OpenPnP<span class="info" tabindex="0" data-tip="Starter files for OpenPnP (2023 build and 2.4): board (placements + fiducials from the .kicad_pcb), job (board location), parts + packages (one per BOM line), a feeder per tray section / Opulo section, and <code>merge_into_openpnp.py</code> (backs up first; <code>--undo</code>). Pick locations are ballparks: check each on the machine.">i</span></summary>
     <label><span>Machine position<span class="info" tabindex="0" data-tip="How plate coordinates become machine X/Y. <b>Taught fiducials</b>: jog the top camera onto each fiducial, type its machine X/Y (or the Placements-table value); a rotation + shift is fitted. <b>Reference hole</b>: jog to one grid hole, type its X/Y. Without either, the export stays in plate coordinates and every pick location is off by the same amount.">i</span></span><select id="op_frame"><option value="fids">taught fiducials</option><option value="hole">a reference grid hole</option><option value="plate">none (plate coordinates)</option></select></label>
     <div id="frameFids" class="frame">
       <label><span>Values are<span class="info" tabindex="0" data-tip="<b>Machine X/Y</b>: the DRO with the camera centred on the fiducial. <b>Placements table</b>: what OpenPnP shows in the Job tab’s Placements table after you edited the fiducial there (relative to the board location).">i</span></span><select id="op_fidMode"><option value="machine">machine X / Y (DRO)</option><option value="table">OpenPnP Placements table</option></select></label>
@@ -269,7 +283,6 @@ td input[type=number] { width: 58px; }
     </div>
     <label><span>Lines not in a tray / feeder</span><select id="op_notInTray"><option value="ignore">Ignore (hand place)</option><option value="place">Place (feeder set up on the machine)</option></select></label>
     <label><span>Plate top Z (machine)</span><input type="number" id="op_plateZ" step="0.1" title="Z on OpenPnP's readout with the nozzle touching the bare plate. Board Z = this + stand height + board thickness; feeder Z = this + pick height. With a measured board top Z (taught fiducials), feeders follow the board instead"></label>
-    <div class="row"><button class="primary" id="opBtn">OpenPnP project (.zip)</button><button id="allBtn" title="One zip: stand STLs, tray STLs (trays), setup CSV, print sheet, OpenPnP project, project JSON">Export everything (.zip)</button></div>
     <div id="opNotes" class="muted"></div>
   </details>
 </aside>
@@ -278,12 +291,60 @@ td input[type=number] { width: 58px; }
   <div class="toolbar">
     <button id="fitBtn">Fit</button>
     <button id="themeBtn">Theme</button>
-    <span class="info" tabindex="0" data-tip="Drag the board, a tray or a feeder · drag empty space to pan · wheel to zoom · R rotates the board · click a grid hole to block it">i</span>
+    <span class="info" tabindex="0" data-tip="Click the board, a stand, a tray or a feeder to see it on the right · drag the board, a tray or a feeder to move it · drag empty space to pan · wheel to zoom · R rotates the board · click a grid hole to block it">i</span>
     <span class="status" id="status"></span>
   </div>
   <svg id="view" xmlns="http://www.w3.org/2000/svg"><g id="gStatic"></g><g id="gDyn"></g></svg>
   <div class="legend" id="legend"></div>
 </main>
+
+<aside id="right">
+  <div class="rtabs"><button data-rtab="objects" class="on">Objects</button><button data-rtab="parts">Parts (BOM)</button></div>
+  <div id="rObjects">
+    <div id="objList" class="objlist"></div>
+    <div class="props">
+      <h2 id="propTitle">Properties</h2>
+      <div id="propBoard" class="pblock">
+    <div class="row">
+      <label style="margin:0"><span>X</span><input type="number" id="pX" step="0.5"></label>
+      <label style="margin:0"><span>Y</span><input type="number" id="pY" step="0.5"></label>
+      <button id="rotBtn" title="R">Rotate 90°</button>
+    </div>
+    <label><span>Side up</span><select id="sideUp"><option value="top">top (1st pass)</option><option value="bottom">bottom (2nd pass, board flipped)</option></select></label>
+    <label><span>Snap while dragging (mm)</span><input type="number" id="snap" value="0.5" step="0.5" min="0"></label>
+    <label><span>Auto-place prefers</span>
+      <select id="prefer">
+        <option value="here">near where the board is now</option>
+        <option value="camera">near the bottom camera</option>
+        <option value="front-left">front-left corner</option>
+        <option value="any">shortest stands, anywhere</option>
+      </select></label>
+    <div class="row" id="rotAllowed"></div>
+    <div class="row"><button id="refineBtn" title="Search ±40 mm around the board, 0.5 mm steps">Refine here</button></div>
+    <div id="placeStatus"></div>
+    <div id="standList" class="out" style="margin-top:6px"></div>
+      </div>
+      <div id="propStand" class="pblock"></div>
+      <div id="propStands" class="pblock">
+    <div class="row">
+      <button class="primary" id="stlBtn" title="A .zip with a folder holding one STL per stand, named number_ref">Stands (.zip, one STL each)</button>
+      <button id="stlAllBtn" title="All stands laid out side by side in a single STL">All in one STL</button>
+      <button id="scadBtn">OpenSCAD</button>
+    </div>
+    <div class="row" id="perStand"></div>
+      </div>
+      <div id="propHolder" class="pblock"></div>
+      <div id="propHolders" class="pblock">
+    <div class="row"><button id="trayZipBtn" title="One STL per tray and sections.csv in a .zip">Trays (.zip)</button><button id="trayCsvBtn" title="Which line goes where (sections / feeder strips)">Setup CSV</button></div>
+    <div id="trayStatus"></div>
+    <div id="trayList" class="out" style="margin-top:6px"></div>
+      </div>
+    </div>
+  </div>
+  <div id="rParts" hidden>
+    <div style="overflow-x:auto"><table id="lineTable"><thead><tr><th title="in a tray / feeder (untick = hand place)">use</th><th>#</th><th>value</th><th>qty</th><th>parts</th><th title="tray / lane, or Opulo feeder / channel @ mm from the first end">where</th><th>tape</th><th>pitch</th><th>carrier</th></tr></thead><tbody></tbody></table></div>
+  </div>
+</aside>
 <div id="tipBox"></div>
 </div>
 
@@ -303,6 +364,11 @@ td input[type=number] { width: 58px; }
 //   ui-5 status chips; long help moved behind i icons; ui-3 one saved layout per board + recent boards + project file
 //   format (app / format / saved), restore offered when a laid-out board is opened again. Print sheet = placement map +
 //   loading list (pnp_sheet.js), also sheet.html in Export everything.
+// DONE 2026-11-10: layout like KiCad / PrusaSlicer: top bar (files, auto-place, pack, outputs, chips), left = setup only,
+//   right = objects on the plates + properties of the one clicked (board, stand, tray / feeder), Parts tab = BOM table
+//   (click a line -> its feeder); expert stand fields under Advanced (ui-6 part). Tag pnp_stand-functional-2026-11-10 = before.
+// TODO(ui-15) Right panel: edit per object (feeder type / channel of a section, move a section to another channel by
+//   drag in the feeder's table; a stand's bolt pair from the free holes around it).
 // TODO(ui-1) Rest of it: keep the machine position (fiducials, board Z, plate Z, reference hole) per machine + board
 //   layout, so another board on the same stands reuses it; show the fit's machine X/Y of each feeder in the list.
 // TODO(ui-4) Rest of it: hover / click a line to highlight its section on the plates (and section -> row); bulk untick by
@@ -608,12 +674,12 @@ function drawDyn() {
   g.innerHTML = '';
   drawTrays(g);
   const p = state.pcb;
-  if (!p) return;
+  if (!p) return drawSel(g);
   // stands under the board
   const rectEl = (r, attrs) => el('rect', { x: r.x0, y: sy(r.y1), width: r.x1 - r.x0, height: r.y1 - r.y0, ...attrs }, g);
   if (RES) RES.stands.forEach((st) => {
     const o = S.standOutline(st);
-    el('path', { d: 'M' + o.map((q) => `${q.x.toFixed(2)},${sy(q.y).toFixed(2)}`).join('L') + 'Z', fill: css('--stand'), stroke: css('--stand-edge'), 'stroke-width': 0.5 }, g);
+    el('path', { d: 'M' + o.map((q) => `${q.x.toFixed(2)},${sy(q.y).toFixed(2)}`).join('L') + 'Z', fill: css('--stand'), stroke: css('--stand-edge'), 'stroke-width': 0.5, 'data-stand': st.num, style: 'cursor: pointer' }, g);
     if (st.kind === 'corner') st.parts.walls.forEach((w) => rectEl(w, { fill: css('--stand-edge'), stroke: 'none' }));
     for (const b of st.bolts) {
       el('circle', { cx: b.x, cy: sy(b.y), r: st.D.pocketR, fill: 'none', stroke: css('--stand-edge'), 'stroke-width': 0.4 }, g);
@@ -643,6 +709,7 @@ function drawDyn() {
     const t = el('text', { x: st.pin.x, y: sy(st.pin.y) + 2.2, 'font-size': 6, 'text-anchor': 'middle', fill: css('--stand-edge'), 'font-weight': 800, stroke: css('--plate'), 'stroke-width': 0.4, 'paint-order': 'stroke', 'pointer-events': 'none' }, g);
     t.textContent = st.num;
   });
+  drawSel(g);
 }
 
 // ------------------------------------------------------------ evaluate + readouts
@@ -684,7 +751,7 @@ function update() {
     per.appendChild(b);
   });
   openpnpOut();
-  refreshChips(); fitSoon();
+  refreshChips(); renderObjects(); fitSoon();
   const lg = $('legend');
   lg.innerHTML = `<b>${state.cfg.plates.map((pl) => `${pl.name}: ${pl.lower ? 'a–g' : 'A–G'}${pl.prefix ? ' (prefix ' + pl.prefix + ')' : ''}, A at ${pl.aAt}`).join(' · ')}</b><br>` +
     `Grid ${M.nRows} rows × ${M.nCols} letters, ${M.P.pitch} mm pitch. Blue = stands, green = board, red = keep-out. The dot on the board marks its lower-left corner.`;
@@ -759,6 +826,7 @@ svg.addEventListener('pointerdown', (e) => {
   const onTray = e.target.closest && e.target.closest('[data-tray]');
   const onPcb = !onTray && e.target.closest && e.target.closest('#pcbGroup');
   const tnum = onTray ? +onTray.dataset.tray : 0;
+  if (onTray) selectObj('holder', tnum, { scroll: true }); else if (onPcb) selectObj('board');
   drag = { mode: onTray ? 'tray' : onPcb ? 'pcb' : 'pan', tnum, tpos0: tnum ? { ...(posMap()[tnum] || {}) } : null, start: u, sx: e.clientX, sy: e.clientY, place0: { ...state.place }, vb0: { ...vb }, moved: false, target: e.target };
   svg.setPointerCapture(e.pointerId);
   svg.classList.add('dragging');
@@ -791,6 +859,8 @@ svg.addEventListener('pointerup', () => {
     const i = state.clickBlocked.indexOf(n);
     if (i >= 0) state.clickBlocked.splice(i, 1); else state.clickBlocked.push(n);
     reparseKeepouts(); drawStatic(); update();
+  } else if (drag && !drag.moved && drag.target && drag.target.dataset && drag.target.dataset.stand) {
+    selectObj('stand', +drag.target.dataset.stand, { scroll: true });
   }
   drag = null; svg.classList.remove('dragging');
 });
@@ -1412,19 +1482,123 @@ $('allBtn').onclick = () => {
   }, 20);
 };
 
+// ------------------------------------------------------------ right panel: objects on the plates + properties of the selected one
+// (KiCad Properties / PrusaSlicer object list): click on the plates or in the list. SEL = { k: 'board' | 'stands' | 'stand' | 'holders' | 'holder', n }
+let SEL = { k: 'board' };
+const escH = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const holderList = () => !TRAYS ? [] : TRAYS.op
+  ? TRAYS.op.feeders.map((f, i) => ({ n: f.num, i, name: `O${f.num}`, sub: `${f.tapeW} mm feeder`, p: TRAYS.pl[i], f }))
+  : TRAYS.pk.trays.map((t, i) => ({ n: t.num, i, name: `T${t.num}`, sub: `${t.L.toFixed(0)} × ${t.W.toFixed(0)} mm tray`, p: TRAYS.pl[i], t }));
+function selectObj(k, n, opts = {}) {
+  SEL = { k, n };
+  if (opts.tab !== false) rtab('objects');
+  renderObjects(); drawDyn();
+  if (opts.scroll) { const o = document.querySelector('#objList .obj.sel'); if (o) o.scrollIntoView({ block: 'nearest' }); }
+}
+function rtab(name) {
+  document.querySelectorAll('.rtabs button').forEach((b) => b.classList.toggle('on', b.dataset.rtab === name));
+  $('rObjects').hidden = name !== 'objects'; $('rParts').hidden = name !== 'parts';
+}
+document.querySelectorAll('.rtabs button').forEach((b) => { b.onclick = () => rtab(b.dataset.rtab); });
+function renderObjects() {
+  const list = $('objList'), hs = holderList(), word = TRAYS && TRAYS.op ? 'Feeders' : 'Trays';
+  // a selection that no longer exists (board closed, fewer feeders) falls back to its group / the board
+  if (SEL.k === 'stand' && !(RES && RES.stands.some((s) => s.num === SEL.n))) SEL = { k: RES ? 'stands' : 'board' };
+  if (SEL.k === 'holder' && !hs.some((h) => h.n === SEL.n)) SEL = { k: hs.length ? 'holders' : 'board' };
+  if (SEL.k === 'holders' && !TRAYS) SEL = { k: 'board' };
+  const rows = [];
+  const mark = (ok) => (ok ? '<span class="st okc">✓</span>' : '<span class="st" style="color:var(--bad)">✗</span>');
+  rows.push({ k: 'board', html: `<span class="dot" style="background:var(--pcb-edge)"></span>${state.pcb ? escH(state.pcb.name) : 'Board (none open)'}${state.pcb ? `<span class="st muted">${state.place.rot}°${state.place.flip ? ' · bottom up' : ''}</span>` : ''}`, cls: 'grp' });
+  if (RES) {
+    rows.push({ k: 'stands', html: `<span class="dot" style="background:var(--stand-edge)"></span>Stands (${RES.stands.length})${mark(RES.ok)}`, cls: 'grp' });
+    for (const st of RES.stands) rows.push({ k: 'stand', n: st.num, html: `${st.num} · ${escH(st.kind === 'corner' ? 'corner ' + st.ref : st.ref)}<span class="st muted">${st.bolts.map((b) => b.name).join(' + ')}</span>`, cls: 'kid' });
+  }
+  if (TRAYS) {
+    rows.push({ k: 'holders', html: `<span class="dot" style="background:var(--tray-edge)"></span>${word} (${hs.length})${mark(hs.length && hs.every((h) => h.p && h.p.ok))}`, cls: 'grp' });
+    for (const h of hs) rows.push({ k: 'holder', n: h.n, html: `${h.name} · ${escH(h.sub)}<span class="st ${h.p && h.p.ok ? 'muted' : ''}" ${h.p && h.p.ok ? '' : 'style="color:var(--bad)"'}>${h.p && h.p.ok ? h.p.bolts.map((b) => b.name).join(' + ') : '✗ ' + escH(h.p ? h.p.why : 'not placed')}</span>`, cls: 'kid' });
+    const hand = state.tray.bom ? state.tray.bom.lines.filter((l) => !l.use).length : 0;
+    if (hand) rows.push({ k: 'parts', html: `<span class="dot" style="background:var(--muted)"></span>Hand placed (${hand})<span class="st muted">Parts tab</span>`, cls: 'grp' });
+  }
+  list.innerHTML = '';
+  for (const r of rows) {
+    const d = document.createElement('div');
+    d.className = `obj ${r.cls}${SEL.k === r.k && (r.n == null || SEL.n === r.n) ? ' sel' : ''}`;
+    d.innerHTML = r.html;
+    d.onclick = () => (r.k === 'parts' ? rtab('parts') : selectObj(r.k, r.n));
+    list.appendChild(d);
+  }
+  renderProps();
+}
+function renderProps() {
+  const show = (id, on) => $(id).classList.toggle('show', !!on);
+  const hs = holderList(), word = TRAYS && TRAYS.op ? 'feeder' : 'tray';
+  show('propBoard', SEL.k === 'board'); show('propStands', SEL.k === 'stands'); show('propStand', SEL.k === 'stand');
+  show('propHolders', SEL.k === 'holders'); show('propHolder', SEL.k === 'holder');
+  const t = $('propTitle');
+  if (SEL.k === 'board') t.textContent = state.pcb ? `Board · ${state.pcb.name}` : 'Board: open a .kicad_pcb (top bar)';
+  if (SEL.k === 'stands') t.textContent = `Stands${RES ? ` (${RES.stands.length})` : ''}`;
+  if (SEL.k === 'holders') t.textContent = `${word[0].toUpperCase() + word.slice(1)}s (${hs.length})`;
+  if (SEL.k === 'stand' && RES) {
+    const st = RES.stands.find((s) => s.num === SEL.n);
+    t.textContent = `Stand ${st.num}`;
+    const arm = Math.min(...st.bolts.map((b) => Math.hypot(b.x - st.anchor.x, b.y - st.anchor.y)));
+    $('propStand').innerHTML = `<div class="kv"><span>Board hole</span><span>${escH(st.kind === 'corner' ? 'corner ' + st.ref : st.ref)}${st.d ? ` ⌀${st.d.toFixed(2)}` : ''}</span>` +
+      `<span>Bolts to</span><b>${st.bolts.map((b) => b.name).join(' + ')}</b><span>Arm</span><span>${arm.toFixed(1)} mm${st.under ? ' (a bolt is under the board)' : ''}</span>` +
+      `<span>Height</span><span>${ES().height} mm (left, 3)</span></div><div class="row"><button id="oneStl">${st.num}.stl</button><button id="allStands">All stands…</button></div>`;
+    $('oneStl').onclick = () => exportStl([st], `${st.num}_${st.ref}`);
+    $('allStands').onclick = () => selectObj('stands');
+  }
+  if (SEL.k === 'holder') {
+    const h = hs.find((x) => x.n === SEL.n), p = h.p, ok = p && p.ok;
+    t.textContent = `${h.name} · ${h.sub}`;
+    let rows = '', parts = 0;
+    if (h.f) for (const ch of h.f.channels) for (const s of ch.sections) {
+      parts += s.count;
+      rows += `<tr data-line="${s.id}"><td>C${ch.num}</td><td><b>${s.id}</b></td><td>${escH(s.line.value.split(' / ')[0])}</td><td>${s.count}${s.refill ? ` +${s.refill}` : ''}</td><td>${s.tape.toFixed(0)}</td><td>${s.a0.toFixed(0)}</td></tr>`;
+    }
+    if (h.t) h.t.lanes.forEach((l, k) => l.sections.forEach((s) => {
+      parts += s.count;
+      rows += `<tr data-line="${s.id}"><td>L${k + 1}</td><td><b>${s.id}</b></td><td>${escH(s.line.value.split(' / ')[0])}</td><td>${s.count}</td><td>${s.tape.toFixed(0)}</td><td></td></tr>`;
+    }));
+    $('propHolder').innerHTML = `<div class="kv"><span>Status</span>${ok ? '<span class="okc">✓ fits</span>' : `<span class="err">✗ ${escH(p ? p.why : 'not placed')}</span>`}` +
+      `<span>Bolts to</span><b>${ok ? p.bolts.map((b) => b.name).join(' + ') : '–'}</b><span>Parts</span><span>${parts}</span>` +
+      (h.f ? `<span>Channels</span><span>${h.f.channels.length} of ${h.f.type.strips} used</span>` : `<span>Size</span><span>${h.t.L.toFixed(1)} × ${h.t.W.toFixed(1)} mm, top ${h.t.T.toFixed(1)}</span>`) + `</div>` +
+      `<table><thead><tr><th>${h.f ? 'ch' : 'lane'}</th><th>#</th><th>value</th><th>qty</th><th>cut</th><th>${h.f ? '@ mm' : ''}</th></tr></thead><tbody>${rows}</tbody></table>` +
+      `<div class="muted" style="margin-top:4px">Drag it on the plates to move it; <i>Pack + place</i> (top) re-plans all of them.</div><div class="row"><button id="allHolders">All ${word}s…</button></div>`;
+    $('allHolders').onclick = () => selectObj('holders');
+  }
+}
+// Parts table: click a line (not its controls) to select the tray / feeder it is in
+$('lineTable').addEventListener('click', (e) => {
+  if (e.target.closest('input, select')) return;
+  const tr = e.target.closest('tr'); if (!tr || !tr.cells[1]) return;
+  const id = tr.cells[1].textContent.trim(), hs = holderList();
+  const h = hs.find((x) => (x.f ? x.f.channels.some((ch) => ch.sections.some((s) => String(s.id) === id)) : x.t.lanes.some((l) => l.sections.some((s) => String(s.id) === id))));
+  if (h) selectObj('holder', h.n, { scroll: true });
+});
+/** selection outline on the plates */
+function drawSel(g) {
+  let path = null;
+  if (SEL.k === 'board' && state.pcb) { const r = RES ? RES.rect : S.pcbRect(state.pcb, state.place); path = [[r.x0, r.y0], [r.x1, r.y0], [r.x1, r.y1], [r.x0, r.y1]]; }
+  if (SEL.k === 'stand' && RES) { const st = RES.stands.find((s) => s.num === SEL.n); if (st) path = S.standOutline(st).map((q) => [q.x, q.y]); }
+  if (SEL.k === 'holder') { const h = holderList().find((x) => x.n === SEL.n); if (h && h.p && h.p.rect) { const r = h.p.rect; path = [[r.x0, r.y0], [r.x1, r.y0], [r.x1, r.y1], [r.x0, r.y1]]; } }
+  if (!path) return;
+  el('path', { d: 'M' + path.map((q) => `${q[0].toFixed(2)},${sy(q[1]).toFixed(2)}`).join('L') + 'Z', fill: 'none', stroke: css('--accent'), 'stroke-width': 1.2, 'stroke-dasharray': '3 2', 'pointer-events': 'none' }, g);
+}
+
 // ------------------------------------------------------------ status chips (one per step, click to jump)
 function refreshChips() {
   const box = $('chips');
   if (!box || !M) return;
-  const secs = [...document.querySelectorAll('aside > details')];
+  const secs = [...document.querySelectorAll('#left > details')];
   const mr = state.pcb && state.pcb.parts ? machineReady() : null;
   const placed = TRAYS ? TRAYS.pl.filter((q) => q && q.ok).length : 0, total = TRAYS ? (TRAYS.op ? TRAYS.op.feeders.length : TRAYS.pk.trays.length) : 0;
   const chips = [
-    { t: 'Board', s: state.pcb ? 'ok' : '', sec: 1, tip: state.pcb ? state.pcb.name : 'open a .kicad_pcb' },
-    { t: 'Stands', s: !RES ? '' : RES.ok ? 'ok' : 'bad', sec: 3, tip: !RES ? '' : RES.ok ? `${RES.stands.length} fit` : RES.problems[0] },
-    { t: 'BOM', s: state.tray.bom ? 'ok' : '', sec: 5, tip: state.tray.bom ? state.tray.bom.name : 'open a BOM or DigiKey order' },
-    { t: isOpulo() ? 'Feeders' : 'Trays', s: !TRAYS ? '' : placed === total && total ? 'ok' : 'bad', sec: 5, tip: TRAYS ? `${placed} of ${total} placed` : '' },
-    { t: 'Machine position', s: !mr ? '' : !mr.ok ? 'bad' : mr.plate ? 'warn' : 'ok', sec: 6, tip: mr ? mr.msg : 'needs the board' },
+    { t: 'Board', s: state.pcb ? 'ok' : '', sec: 1, sel: 'board', tip: state.pcb ? state.pcb.name : 'open a .kicad_pcb' },
+    { t: 'Stands', s: !RES ? '' : RES.ok ? 'ok' : 'bad', sec: 2, sel: 'stands', tip: !RES ? '' : RES.ok ? `${RES.stands.length} fit` : RES.problems[0] },
+    { t: 'BOM', s: state.tray.bom ? 'ok' : '', sec: 3, tab: 'parts', tip: state.tray.bom ? state.tray.bom.name : 'open a BOM or DigiKey order' },
+    { t: isOpulo() ? 'Feeders' : 'Trays', s: !TRAYS ? '' : placed === total && total ? 'ok' : 'bad', sec: 3, sel: 'holders', tip: TRAYS ? `${placed} of ${total} placed` : '' },
+    { t: 'Machine position', s: !mr ? '' : !mr.ok ? 'bad' : mr.plate ? 'warn' : 'ok', sec: 4, tip: mr ? mr.msg : 'needs the board' },
   ];
   box.innerHTML = '';
   for (const c of chips) {
@@ -1432,7 +1606,10 @@ function refreshChips() {
     b.className = 'chip ' + c.s;
     b.textContent = (c.s === 'ok' ? '✓ ' : c.s === 'bad' ? '✗ ' : c.s === 'warn' ? '⚠ ' : '○ ') + c.t;
     b.title = c.tip || '';
-    b.onclick = () => { const d = secs[c.sec]; if (d) { d.open = true; d.scrollIntoView({ block: 'start', behavior: 'smooth' }); } };
+    b.onclick = () => {
+      const d = secs[c.sec]; if (d) { d.open = true; d.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+      if (c.sel) selectObj(c.sel); if (c.tab) rtab(c.tab);
+    };
     box.appendChild(b);
   }
 }

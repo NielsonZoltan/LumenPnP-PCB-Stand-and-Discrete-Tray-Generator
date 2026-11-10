@@ -2,6 +2,14 @@
 
 Open `pnp_stand.html` in a browser (double-click it; it works offline). Open `pnp_stand.html#demo` to see a sample board.
 
+Layout (like KiCad / PrusaSlicer): **top bar** = open board / BOM / project, save, *Auto-place board*, *Pack + place*,
+*🖨 Print map*, OpenPnP, *Export everything*, and the step chips (click one to jump). **Left** = setup: 1 Machine, 2 Board, 3 Stands
+(expert fields under *Advanced*), 4 Cut tape, 5 Machine position / OpenPnP. Placement (4 below) is the board's properties
+on the right; stand export (5 below) is *Stands* on the right. **Middle** = the plates. **Right** = what's on the plates (board, each
+stand, each tray / feeder, hand-placed lines) and the properties of whichever you click, there or on the plates: the
+board's position, rotation and auto-place options; a stand's holes and its STL; a feeder's bolts and channel by channel
+contents. *Parts (BOM)* is the line table; click a line to jump to its tray / feeder.
+
 1. **Machine**: pick the profile (v3/v3.1 has the bottom camera in a plate; on v4 the camera is beside the plates), the
    number of plates, and for each plate its letter case and which edge A is on. Our rev00 plates run A–G, then G–A on the
    next plate: lower (front) plate `a–g`, upper (rear) plate `A–G`. Grid holes are named letter + row, e.g. `d24`, `D24`.
