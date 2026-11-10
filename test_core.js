@@ -316,3 +316,30 @@ const O = require('./pnp_openpnp_core.js');
     for (const f of prj.files) fs.writeFileSync(path.join(outDir, 'openpnp', f.name), f.text);
   }
 }
+
+// ------------------------------------------------------------ print sheet (pnp_sheet.js): map + loading list from plain data
+{
+  const SH = require('./pnp_sheet.js');
+  const H2 = (n) => m.byName.get(n);
+  const model = {
+    title: 'test · placement map', subtitle: 's', date: '2026-11-09',
+    plates: m.plates.map((p) => ({ x0: p.x0, y0: p.y0, x1: p.x1, y1: p.y1, name: p.name })),
+    holes: m.holes.map((h) => ({ x: h.x, y: h.y, name: h.name, exists: h.exists, k: h.k })), pitch: 15, holeD: 3.4,
+    zones: [{ type: 'circle', x: 300, y: 60, r: 26, label: 'camera' }],
+    board: { name: 'b<&>', rect: { x0: 349.6, y0: 37.1, x1: 414.4, y1: 101.9 }, outline: [], fids: [{ name: 'FID1', x: 352, y: 90 }], label: 'top side up, 0°' },
+    stands: [{ num: 1, bolts: [H2('c23'), H2('b24')].map((h) => ({ name: h.name, x: h.x, y: h.y })), pin: { x: 352, y: 40 } }],
+    holders: [{ id: 'O1', title: 'O1 · 8 mm', ok: true, rect: { x0: 220, x1: 260, y0: 0, y1: 120 }, bolts: [{ name: 'a15', x: 225, y: 15 }],
+      lanes: [{ name: 'C1', rect: { x0: 221.5, x1: 228.5, y0: 2, y1: 118 } }],
+      strips: [{ line: 1, label: '#1 100nF ×56', vertical: true, rect: { x0: 221.5, x1: 228.5, y0: 2, y1: 118 }, firstAt: { x: 225, y: 118, dir: 'down' } }],
+      head: '8 mm feeder', rows: [{ lane: 'C1', at: '0', cut: '116', line: 1, value: '100nF', refs: 'C1 C2', qty: 56, tape: '2 mm paper', note: '' }] },
+    { id: 'O2', title: 'O2', ok: false, why: 'no free spot', rect: null, bolts: [], lanes: [], strips: [], head: 'x', rows: [] }],
+    standRows: [{ num: 1, bolts: 'c23 + b24', where: 'front-left', ref: 'TH3' }], hand: [{ line: 6, value: 'MCU', refs: 'U1' }], steps: ['go'],
+  };
+  const doc = SH.sheetDocument(model);
+  const vb = doc.match(/viewBox="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"/).slice(1).map(Number);
+  assert(/^<!doctype html>/.test(doc) && /size: letter landscape/.test(doc) && doc.includes('b&lt;&amp;&gt;') && !doc.includes('b<&>'),
+    'sheet: standalone page, letter landscape, text escaped');
+  assert(vb[0] <= 220 - 15 && vb[0] + vb[2] >= 414.4 + 15 && vb[0] > 0 && vb[0] + vb[2] < 600, `sheet: map cropped to holders + board (x ${vb[0]}..${(vb[0] + vb[2]).toFixed(0)})`);
+  assert(/>a15</.test(doc) && />c23</.test(doc) && />b24</.test(doc) && doc.includes('#1 100nF ×56') && doc.includes('O2: no free spot') && doc.includes('MCU'),
+    'sheet: bolt holes, strip labels, unplaced holder warning and hand-place list on it');
+}

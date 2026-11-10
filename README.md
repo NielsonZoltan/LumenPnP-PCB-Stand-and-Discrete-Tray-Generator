@@ -30,8 +30,12 @@ Open `pnp_stand.html` in a browser (double-click it; it works offline). Open `pn
    allowed, preferring a spot near the board's current position, near the camera, or near the front-left corner.
    *Refine here* searches ±40 mm around the current spot.
 5. **Export**: a .zip with a folder holding one STL per stand (`1_H1.stl`, …; each is one closed solid), or all stands
-   in one STL, or a single stand. Also editable OpenSCAD, a printable
-   sheet (plate view + which grid holes each stand bolts to), project JSON. Optionally, jog the nozzle to one grid hole,
+   in one STL, or a single stand. Also editable OpenSCAD, project JSON, and the **print sheet** (*Print sheet*, letter
+   landscape): page 1 a map of the plates seen from above (front at the bottom, cropped to what's used) with the board,
+   each stand and its grid holes, every tray / Opulo feeder with its bolt holes and each cut strip where it goes; page 2
+   the loading list (per tray / feeder: lane or channel, start, cut length, line, value, refs, qty, tape) with tick
+   boxes, the stands, hand-placed parts and what to do next. It shows what's on the plates when you press it, so print
+   after the last drag. Optionally, jog the nozzle to one grid hole,
    enter its machine X/Y, and the tool gives the OpenPnP board location.
 
 6. **Cut-tape trays**: open the KiCad BOM CSV (`fab/<board>_bom.csv`, Qty per board), or a **DigiKey order CSV**
@@ -119,6 +123,7 @@ in from each corner and are always keep-outs. Edit *Plate dimensions* if a plate
 | `pnp_stand_core.js` | grid, keep-outs, KiCad import, stand assignment, auto-placement, STL/SCAD export (no DOM; Node-testable) |
 | `pnp_openpnp_core.js` | OpenPnP 2.4 board / job / parts / packages / strip feeders + merge script (no DOM; Node-testable) |
 | `pnp_tray_core.js` | BOM grouping, tape table, section/lane/tray packing, tray placement, tray STL; Opulo strip-feeder packing and placement (no DOM; Node-testable) |
+| `pnp_sheet.js` | the print sheet (placement map + loading list) from plain data; the page builds the data (`sheetModel()`) |
 | `fit_fiducials.js` | moves an exported OpenPnP project onto the machine from taught fiducials + measured board Z (Node CLI, also a module) |
 | `test_core.js` | `node tools/pnp_stand/test_core.js [board.kicad_pcb] [out_dir] [corner board] [bom.csv]`: grid, stands, trays, closed meshes |
 | `vendor/jscad-modeling.min.js` | [@jscad/modeling](https://github.com/jscad/OpenJSCAD.org) 2.12.5, MIT (`vendor/jscad-LICENSE.txt`); unpkg fallback |

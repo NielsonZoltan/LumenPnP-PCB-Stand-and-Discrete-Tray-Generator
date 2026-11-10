@@ -60,7 +60,6 @@ td input[type=number] { width: 58px; }
 .toolbar, .legend { user-select: none; -webkit-user-select: none; }#view.dragging { cursor: grabbing; }
 .legend { position: absolute; left: 10px; bottom: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--muted); max-width: 520px; }
 .out { font: 12px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
-#sheet { display: none; }
 .info { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--muted); color: var(--muted); font: italic 700 10px/1 Georgia, serif; cursor: help; margin-left: 5px; vertical-align: 1px; flex: none; }
 .info:hover, .info:focus { border-color: var(--accent); color: var(--accent); outline: none; }
 #tipBox { position: fixed; z-index: 50; max-width: 320px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font-size: 12px; line-height: 1.45; box-shadow: 0 4px 16px rgba(0,0,0,.25); pointer-events: none; display: none; }
@@ -81,7 +80,6 @@ td input[type=number] { width: 58px; }
   .app { display: block; height: auto; }
   main { overflow: visible; }
   #view { height: 120mm; }
-  #sheet { display: block; padding: 0 4mm; color: #000; }
   body { background: #fff; }
 }
 </style>
@@ -285,7 +283,6 @@ td input[type=number] { width: 58px; }
   </div>
   <svg id="view" xmlns="http://www.w3.org/2000/svg"><g id="gStatic"></g><g id="gDyn"></g></svg>
   <div class="legend" id="legend"></div>
-  <div id="sheet"></div>
 </main>
 <div id="tipBox"></div>
 </div>
@@ -296,6 +293,7 @@ td input[type=number] { width: 58px; }
 <script src="pnp_tray_core.js?v=5"></script>
 <script src="pnp_openpnp_core.js?v=3"></script>
 <script src="fit_fiducials.js?v=2"></script>
+<script src="pnp_sheet.js?v=1"></script>
 <script>
 'use strict';
 // ------------------------------------------------------------------------------------------------ UI to-dos
@@ -303,7 +301,8 @@ td input[type=number] { width: 58px; }
 // DONE 2026-11-09: ui-1 (part) taught fiducials / reference hole / plate choice in section 7 with the fit in the page and
 //   an export that refuses to go out in plate coordinates silently; ui-2 Export everything; ui-4 (part) "where" column;
 //   ui-5 status chips; long help moved behind i icons; ui-3 one saved layout per board + recent boards + project file
-//   format (app / format / saved), restore offered when a laid-out board is opened again.
+//   format (app / format / saved), restore offered when a laid-out board is opened again. Print sheet = placement map +
+//   loading list (pnp_sheet.js), also sheet.html in Export everything.
 // TODO(ui-1) Rest of it: keep the machine position (fiducials, board Z, plate Z, reference hole) per machine + board
 //   layout, so another board on the same stands reuses it; show the fit's machine X/Y of each feeder in the list.
 // TODO(ui-4) Rest of it: hover / click a line to highlight its section on the plates (and section -> row); bulk untick by
@@ -318,14 +317,17 @@ td input[type=number] { width: 58px; }
 // TODO(ui-10) Read the captured tray-feeder locations back from the machine's machine.xml and correct the Opulo model
 //   (channel pitch, pocket offset from the channel centre, usable length) so the next export lands closer.
 // TODO(ui-11) Collapse sections once their chip is green, and open the next unfinished one.
+// TODO(ui-13) Opulo: prefer bolt holes on the feeder's centre line (Opulo's own A15 + G15) and flag a feeder bolted
+//   off-centre: those holes may not exist on the printed feeder (the print sheet shows them under a channel).
+// TODO(ui-14) Print sheet: a per-feeder close-up (channels, strips, first pocket) to cut out and stick on the feeder end.
 // TODO(ui-12) Sidebar is 360 px: on a small laptop the line table scrolls sideways; let the sidebar be dragged wider.
-const S = window.PnpStand, TR = window.PnpTray, OP = window.PnpOpenPnP, FIT = window.PnpFit;
+const S = window.PnpStand, TR = window.PnpTray, OP = window.PnpOpenPnP, FIT = window.PnpFit, SH = window.PnpSheet;
 // the browser can keep an old copy of the core after an update; say so instead of failing later
-const CORE_VERSION = 5, TRAY_VERSION = 5, OPENPNP_VERSION = 3, FIT_VERSION = 2;
-if (!S || S.VERSION !== CORE_VERSION || !TR || TR.VERSION !== TRAY_VERSION || !OP || OP.VERSION !== OPENPNP_VERSION || !FIT || FIT.VERSION !== FIT_VERSION) {
+const CORE_VERSION = 5, TRAY_VERSION = 5, OPENPNP_VERSION = 3, FIT_VERSION = 2, SHEET_VERSION = 1;
+if (!S || S.VERSION !== CORE_VERSION || !TR || TR.VERSION !== TRAY_VERSION || !OP || OP.VERSION !== OPENPNP_VERSION || !FIT || FIT.VERSION !== FIT_VERSION || !SH || SH.VERSION !== SHEET_VERSION) {
   addEventListener('DOMContentLoaded', () => {
     const b = document.createElement('div');
-    b.textContent = `pnp_stand_core.js / pnp_tray_core.js is an old cached copy (needs core ${CORE_VERSION}, trays ${TRAY_VERSION}, OpenPnP ${OPENPNP_VERSION}, fit ${FIT_VERSION}). Press Ctrl+F5 to reload.`;
+    b.textContent = `pnp_stand_core.js / pnp_tray_core.js / pnp_sheet.js is an old cached copy (needs core ${CORE_VERSION}, trays ${TRAY_VERSION}, OpenPnP ${OPENPNP_VERSION}, fit ${FIT_VERSION}, sheet ${SHEET_VERSION}). Press Ctrl+F5 to reload.`;
     b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99;padding:8px 12px;background:#b3261e;color:#fff;font:14px system-ui';
     document.body.appendChild(b);
   });
@@ -853,45 +855,115 @@ $('scadBtn').onclick = () => {
   const meta = `${baseName()} at X ${state.place.cx.toFixed(2)} Y ${state.place.cy.toFixed(2)} rot ${state.place.rot}`;
   download(`${baseName()}_stands.scad`, S.scadSource(RES.stands, ES(), meta), 'text/plain');
 };
-function sheetHtml() {
-  const sp = ES();
-  const rows = RES.stands.map((st) => `<tr><td><b>${st.num}</b></td><td>${st.kind === 'corner' ? 'corner ' + st.ref : st.ref}</td><td>${st.d ? st.d.toFixed(2) : '–'}</td><td><b>${st.bolts.map((b) => b.name).join(' + ')}</b></td></tr>`).join('');
-  return `<h2>${state.pcb.name}: LumenPnP stands</h2>
-    <p>Board centre X ${state.place.cx.toFixed(2)} Y ${state.place.cy.toFixed(2)} mm, rotation ${state.place.rot}°, <b>${state.place.flip ? 'bottom' : 'top'} side up</b>, board ${sp.pcbThick} mm thick.
-    Stand height ${sp.height} mm, ${sp.bolts} M3 bolt(s) per stand, ${sp.pocket === 'hex' ? 'nut on top' : sp.pocket === 'round' ? 'screw head on top' : 'plain holes'},
-    PCB ${sp.iface === 'pin' ? 'on printed pins' : 'on blind holes'}. ${state.cfg.plates.map((p) => `${p.name}: ${p.lower ? 'a–g' : 'A–G'}`).join(', ')}.</p>
-    <table><thead><tr><th>Stand</th><th>PCB hole</th><th>⌀</th><th>Grid holes</th></tr></thead><tbody>${rows}</tbody></table>
-    <pre>${$('opOut').textContent}</pre>${traySheet()}`;
+// ------------------------------------------------------------ print sheet: placement map + loading list (pnp_sheet.js)
+/** what's on the plates now, as plain data for PnpSheet.sheetDocument (plate coordinates, mm) */
+function sheetModel() {
+  const p = state.pcb, sp = ES(), tp = state.tray.tp, lines = state.tray.bom ? state.tray.bom.lines : [];
+  const shortV = (l) => { const v = String(l.value).split(' / ')[0].replace(/ \d+(\.\d+)?V\b/, '').replace(/ (X7R|X5R|C0G|NP0|1%|5%)$/, ''); return v.length <= 9 ? v : l.refs[0] || v.slice(0, 9); };
+  const refsTxt = (refs) => (refs.length > 5 ? `${refs.length} places` : refs.join(' '));
+  const model = {
+    title: `${p ? p.name : 'Plates'} · LumenPnP placement map`, date: new Date().toISOString().slice(0, 10),
+    plates: M.plates.map((pl) => ({ x0: pl.x0, y0: pl.y0, x1: pl.x1, y1: pl.y1, name: `${pl.name} · ${pl.cfg.lower ? 'a–g' : 'A–G'}, ${pl.cfg.lower ? 'a' : 'A'} at the ${pl.cfg.aAt}` })),
+    holes: M.holes.map((h) => ({ x: h.x, y: h.y, name: h.name, exists: h.exists, blocked: KO.blocked.has(h.name), k: h.k })),
+    pitch: M.P.pitch, holeD: M.P.holeD, zones: KO.zones, stands: [], holders: [], standRows: [], hand: [], steps: [],
+  };
+  const sub = [state.cfg.label];
+  if (p) {
+    const r = RES ? RES.rect : S.pcbRect(p, state.place);
+    const fids = (p.parts || []).filter((q) => (/fiducial/i.test(q.footprint) || /^FID\d*$/i.test(q.ref)) && (q.side === 'Bottom') === !!state.place.flip && q.u != null)
+      .map((q) => ({ name: q.ref, ...S.toMachine(p, state.place, q.u, q.v) }));
+    model.board = { name: p.name, rect: r, fids, label: `${state.place.flip ? 'bottom' : 'top'} side up, ${state.place.rot}°`,
+      outline: p.outline.map((l) => l.map((q) => S.toMachine(p, state.place, q.u, q.v))) };
+  }
+  if (RES) {
+    const r = RES.rect, cx = (r.x0 + r.x1) / 2, cy = (r.y0 + r.y1) / 2;
+    RES.stands.forEach((st) => {
+      model.stands.push({ num: st.num, outline: S.standOutline(st), bolts: st.bolts.map((b) => ({ name: b.name, x: b.x, y: b.y })), pin: st.pin });
+      const where = `${st.pin.y >= cy ? 'rear' : 'front'}-${st.pin.x >= cx ? 'right' : 'left'}`;
+      model.standRows.push({ num: st.num, bolts: st.bolts.map((b) => b.name).join(' + '), where, ref: st.kind === 'corner' ? 'corner ' + st.ref : st.ref });
+    });
+    model.standNote = `${sp.height} mm tall, ${sp.bolts} bolt(s) each, ${sp.pocket === 'hex' ? 'nut on top' : sp.pocket === 'round' ? 'screw head on top' : 'plain holes'}` +
+      (state.op && state.op.boardZ ? `, board top Z ${state.op.boardZ}` : '');
+  }
+  const plateOf = (rect) => { const pl = M.plates.find((q) => rect.y0 >= q.y0 - 1e-6 && rect.y1 <= q.y1 + 1e-6); return pl ? pl.name.split(' (')[0].toLowerCase() + ' plate' : 'two plates'; };
+  if (TRAYS && TRAYS.op) {
+    const { op, pl } = TRAYS, along180 = +tp.opOrient === 180;
+    model.holderWord = 'feeder'; model.laneWord = 'Ch';
+    model.legendNote = along180 ? '▶ first end of a channel (left): lay each strip from here, first part one pocket in' : '▼ first end of a channel (back): lay each strip from here, first part one pocket in';
+    op.feeders.forEach((f, i) => {
+      const pos = pl[i], ok = !!(pos && pos.ok);
+      const h = { id: 'O' + f.num, title: `O${f.num} · ${f.tapeW} mm`, ok, why: pos ? pos.why : 'not placed', rect: pos && pos.rect, bolts: pos && pos.bolts ? pos.bolts.map((b) => ({ name: b.name, x: b.x, y: b.y })) : [], lanes: [], strips: [], rows: [] };
+      if (h.rect) {
+        const r = h.rect, end = (f.len - f.usable) / 2, n = f.type.strips, w = f.tapeW - 1;
+        for (let k = 0; k < n; k++) {
+          const c = (along180 ? (r.y0 + r.y1) / 2 : (r.x0 + r.x1) / 2) + (k - (n - 1) / 2) * f.type.pitch;
+          h.lanes.push({ name: 'C' + (k + 1), rect: along180 ? { x0: r.x0 + end, x1: r.x1 - end, y0: c - w / 2, y1: c + w / 2 } : { x0: c - w / 2, x1: c + w / 2, y0: r.y0 + end, y1: r.y1 - end } });
+        }
+        for (const c of TR.opuloCoords(f, pos, tp)) {
+          const s = c.sec, a = c.lane;
+          h.strips.push({ line: s.id, label: `#${s.id} ${shortV(s.line)} ×${s.count}${s.refill ? ` (+${s.refill})` : ''}`, vertical: !along180,
+            rect: along180 ? { x0: a.a0, x1: a.a1, y0: c.c - w / 2, y1: c.c + w / 2 } : { x0: c.c - w / 2, x1: c.c + w / 2, y0: a.a0, y1: a.a1 },
+            firstAt: s.a0 < 0.5 ? (along180 ? { x: a.a0, y: c.c, dir: 'right' } : { x: c.c, y: a.a1, dir: 'down' }) : null });
+        }
+      }
+      for (const ch of f.channels) for (const s of ch.sections) {
+        const l = s.line;
+        h.rows.push({ lane: 'C' + ch.num, at: s.a0.toFixed(0), cut: s.tape.toFixed(0), line: s.id, value: l.value, sub: `${l.mpn || ''}${l.mpn ? ' · ' : ''}${fpShort(l.footprint)}`,
+          refs: refsTxt(l.refs), qty: s.count + (s.refill ? ` +${s.refill}` : ''), tape: `${l.pitch} mm ${l.carrier}`,
+          note: [s.refill ? `${s.refill} more to slide in later` : '', s.of > 1 ? `piece ${s.k} of ${s.of}` : '', l.tapeNote].filter(Boolean).join('; ') });
+      }
+      const parts = f.channels.reduce((a, ch) => a + ch.sections.reduce((b, s) => b + s.count, 0), 0);
+      h.head = `${f.tapeW} mm feeder · bolts <b>${ok ? h.bolts.map((b) => b.name).join(' + ') : '✗ ' + (h.why || 'not placed')}</b> <small>(${h.rect ? plateOf(h.rect) + ', ' : ''}${parts} parts)</small>`;
+      model.holders.push(h);
+    });
+    sub.push(Object.entries(op.need).map(([W, n]) => `${n} × ${W} mm`).join(' + ') + ' Opulo feeders');
+    for (const f of op.feeders) for (const ch of f.channels) for (const s of ch.sections) if (s.refill)
+      model.steps.push(`#${s.id} (O${f.num} C${ch.num}): when the ${s.count} run out, slide the other ${s.refill} in and set PLAN-${s.id}'s feed count back to 0.`);
+    model.steps.push('Host, OpenPnP closed: <code>python3 merge_into_openpnp.py</code> in the exported OpenPnP folder.',
+      'Each PLAN- feeder: Position Camera → centre on the first part → Capture Camera Location → Z + rotation → Apply.',
+      'Open the job, run the fiducial check, place one of each before the full run.');
+  } else if (TRAYS && TRAYS.pk) {
+    model.holderWord = 'tray'; model.laneWord = 'Lane';
+    model.legendNote = 'sprocket holes toward the front (low Y) of each lane; first part at the end with the engraved number';
+    TRAYS.pk.trays.forEach((t, i) => {
+      const pos = TRAYS.pl[i], ok = !!(pos && pos.ok);
+      const h = { id: 'T' + t.num, title: 'T' + t.num, ok, why: pos ? pos.why : 'not placed', rect: pos && pos.rect, bolts: pos && pos.bolts ? pos.bolts.map((b) => ({ name: b.name, x: b.x, y: b.y })) : [], lanes: [], strips: [], rows: [] };
+      t.lanes.forEach((l, k) => {
+        if (h.rect && l.sections.length) {
+          const r = h.rect, y0 = r.y0 + l.c0, y1 = r.y0 + l.c1;
+          h.lanes.push({ name: 'L' + (k + 1), rect: { x0: r.x0 + Math.min(...l.sections.map((s) => s.aTape)), x1: r.x0 + Math.max(...l.sections.map((s) => s.a1)), y0, y1 } });
+          for (const s of l.sections) h.strips.push({ line: s.id, label: `#${s.id} ${shortV(s.line)} ×${s.count}`, vertical: false, rect: { x0: r.x0 + s.aTape, x1: r.x0 + s.a1, y0, y1 }, firstAt: null });
+        }
+        for (const s of l.sections) {
+          const ln = s.line;
+          h.rows.push({ lane: 'L' + (k + 1), at: '', cut: s.tape.toFixed(0), line: s.id, value: ln.value, sub: `${ln.mpn || ''}${ln.mpn ? ' · ' : ''}${fpShort(ln.footprint)}`,
+            refs: refsTxt(ln.refs), qty: s.count, tape: `${ln.tapeW} mm / ${ln.pitch} ${ln.carrier}`, note: ln.tapeNote || '' });
+        }
+      });
+      h.head = `${t.L.toFixed(0)} × ${t.W.toFixed(0)} mm tray · bolts <b>${ok ? h.bolts.map((b) => b.name).join(' + ') : '✗ ' + (h.why || 'not placed')}</b> <small>(${h.rect ? plateOf(h.rect) : 'not placed'})</small>`;
+      model.holders.push(h);
+    });
+    sub.push(`${TRAYS.pk.trays.length} printed tray(s), ${tp.boards} board(s) per run`);
+    model.steps.push('Cut each strip to its length; sprocket holes toward the front of the lane.', 'Merge the OpenPnP project on the host, then Auto Setup each strip feeder.');
+  }
+  model.hand = lines.filter((l) => !l.use).map((l) => ({ line: l.id, value: l.value, refs: l.refs.join(' ') }));
+  const fz = state.op && state.op.frame === 'fids' && Object.keys(state.op.fids || {}).length;
+  if (fz) sub.push(`fiducials taught (${fz})`);
+  model.subtitle = 'Plates seen from above, front at the bottom · ' + sub.join(' · ');
+  return model;
 }
-$('printBtn').onclick = () => { if (!RES) return; $('sheet').innerHTML = sheetHtml(); window.print(); };
-function traySheet() {
-  if (TRAYS && TRAYS.op) return opuloSheet();
-  if (!TRAYS || !TRAYS.pk.trays.length) return '';
-  const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const where = new Map();
-  TRAYS.pk.trays.forEach((t, i) => t.lanes.forEach((l, k) => l.sections.forEach((s) => where.set(s.id, { t, k, s, p: TRAYS.pl[i] }))));
-  const rows = state.tray.bom.lines.filter((l) => where.has(l.id)).map((l) => {
-    const w = where.get(l.id);
-    return `<tr><td><b>${l.id}</b></td><td>${esc(l.value)}</td><td>${esc(fpShort(l.footprint))}</td><td>${w.s.count}</td><td>${l.tapeW} / ${l.pitch} ${l.carrier}</td><td>${w.s.tape.toFixed(0)} mm</td><td><b>T${w.t.num} L${w.k + 1}</b></td></tr>`;
-  }).join('');
-  const bolts = TRAYS.pk.trays.map((t, i) => `T${t.num}: ${TRAYS.pl[i] && TRAYS.pl[i].ok ? TRAYS.pl[i].bolts.map((b) => b.name).join(' + ') : 'not placed'}`).join(' · ');
-  const hand = state.tray.bom.lines.filter((l) => !l.use).map((l) => `${l.id} ${esc(l.value)} (${l.refs.join(' ')})`).join(', ');
-  return `<h3>Cut-tape trays (${state.tray.tp.boards} board(s) per run)</h3><p>Bolts: ${bolts}. Tape sprocket holes toward the front (low Y) of each lane; first part at the end with the engraved number.</p>
-    <table><thead><tr><th>#</th><th>Value</th><th>Footprint</th><th>Parts</th><th>Tape</th><th>Cut length</th><th>Tray / lane</th></tr></thead><tbody>${rows}</tbody></table>` +
-    (hand ? `<p>Not in a tray: ${hand}</p>` : '');
-}
-function opuloSheet() {
-  const { op, pl } = TRAYS;
-  if (!op.feeders.length) return '';
-  const esc = (x) => String(x).replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const rows = op.feeders.flatMap((f, i) => f.channels.flatMap((ch) => ch.sections.map((s) => `<tr><td><b>O${f.num}</b> C${ch.num}</td><td>${f.tapeW} mm</td><td><b>${s.id}</b></td><td>${esc(s.line.value)}</td><td>${esc(fpShort(s.line.footprint))}</td><td>${s.count}${s.refill ? ` + ${s.refill} refill` : ''}${s.of > 1 ? ` (${s.k}/${s.of})` : ''}</td><td>${s.tape.toFixed(0)} mm @ ${s.a0.toFixed(0)}</td><td>${s.line.pitch} mm ${s.line.carrier}</td><td>${pl[i] && pl[i].ok ? pl[i].bolts.map((b) => b.name).join(' + ') : 'not placed'}</td></tr>`))).join('');
-  const need = Object.entries(op.need).map(([W, n]) => `${n} × ${W} mm`).join(', ');
-  const hand = state.tray.bom.lines.filter((l) => !l.use).map((l) => `${l.id} ${esc(l.value)} (${l.refs.join(' ')})`).join(', ');
-  const dir = +state.tray.tp.opOrient === 180 ? 'channels along the rows, C1 at the front, "@" measured from the left end' : 'channels front to back, C1 on the left, "@" measured from the back end';
-  return `<h3>Opulo tray feeders (${state.tray.tp.boards} board(s) per run): ${need}</h3><p>${dir}. Cut each strip to its length, ${state.tray.tp.opGap} mm gap between strips in a channel; first part ${state.tray.tp.leader} pocket(s) in. OpenPnP: one tray feeder per row (PLAN-&lt;line&gt;).</p>
-    <table><thead><tr><th>Feeder / channel</th><th>Tape</th><th>#</th><th>Value</th><th>Footprint</th><th>Parts</th><th>Cut / starts at</th><th>Pitch</th><th>Bolts</th></tr></thead><tbody>${rows}</tbody></table>` +
-    (hand ? `<p>Hand place: ${hand}</p>` : '');
-}
+const sheetDoc = () => SH.sheetDocument(sheetModel());
+// print from a hidden frame: the sheet keeps its own page setup (letter landscape) and the page stays as it is
+$('printBtn').onclick = () => {
+  if (!M || (!RES && !TRAYS)) return setStatus('Nothing to print yet: load a board or a BOM', 'bad');
+  const old = $('printFrame'); if (old) old.remove();
+  const fr = document.createElement('iframe');
+  fr.id = 'printFrame'; fr.setAttribute('aria-hidden', 'true');
+  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
+  fr.onload = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { setStatus('Print failed: ' + e.message, 'bad'); } };
+  fr.srcdoc = sheetDoc();
+  document.body.appendChild(fr);
+};
 // ------------------------------------------------------------ projects: a file to move between computers / keep in a repo,
 // and one saved layout per board in this browser (so opening another board doesn't lose the panel's layout)
 const PROJECT_FORMAT = 1;
@@ -1330,7 +1402,7 @@ $('allBtn').onclick = () => {
         files.push({ name: `${dir}setup.csv`, data: enc(TR.opuloCsv(state.tray.bom.lines, TRAYS.op, TRAYS.pl)) });
         have.push('Opulo feeder setup.csv');
       }
-      if (RES) { files.push({ name: `${dir}sheet.html`, data: enc(`<!doctype html><meta charset="utf-8"><title>${base}</title><style>body{font:13px system-ui;margin:12mm}table{border-collapse:collapse}td,th{border-bottom:1px solid #ccc;padding:2px 6px;text-align:left}</style>${sheetHtml()}`) }); have.push('sheet.html'); }
+      if (RES || TRAYS) { files.push({ name: `${dir}sheet.html`, data: enc(sheetDoc()) }); have.push('sheet.html (placement map + loading list)'); }
       if (prj) { prj.files.forEach((f) => files.push({ name: `${dir}openpnp/${f.name}`, data: enc(f.text) })); have.push(`OpenPnP project (${machineReady().msg})`); }
       files.push({ name: `${dir}${base}_project.json`, data: enc(JSON.stringify(state, null, 1)) });
       download(`${base}_all.zip`, S.zipStore(files), 'application/zip');
