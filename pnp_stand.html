@@ -90,7 +90,7 @@ td input[type=number] { width: 58px; }
   <h1>LumenPnP stand generator</h1>
   <p class="sub">Stands, cut-tape holders and an OpenPnP starter for the LumenPnP staging plates.<span class="info" tabindex="0" data-tip="Work top to bottom: machine, board, stands, placement, then cut tape (our printed trays or Opulo tray feeders) and the OpenPnP project. Hover an <b>i</b> for details. Everything is saved in this browser; <i>Save project</i> moves it to another computer.">i</span></p>
   <div class="chips" id="chips"></div>
-  <div class="row" style="align-items:center"><button id="saveBtn">Save project file</button><button id="loadBtn">Open project file</button><input type="file" id="loadFile" accept=".json" hidden><span class="info" tabindex="0" data-tip="<b>This browser</b> keeps every board’s layout on its own (board, stands, BOM, trays / feeders, machine position, taught fiducials), saved as you go: pick one under <i>saved boards</i>, and opening a .kicad_pcb you laid out before offers its layout back. <b>Project file</b> (.json): the same thing as a file, to move to another computer or keep next to the board in the repo (e.g. <code>hardware/monk/openpnp/monk_panel_project.json</code>).">i</span></div>
+  <div class="row" style="align-items:center"><button id="saveBtn">Save project file</button><button id="loadBtn">Open project file</button><button class="printMap" title="Placement map + loading list (letter landscape): grid holes for stands and trays / feeders, which strip goes where">🖨 Print map</button><input type="file" id="loadFile" accept=".json" hidden><span class="info" tabindex="0" data-tip="<b>This browser</b> keeps every board’s layout on its own (board, stands, BOM, trays / feeders, machine position, taught fiducials), saved as you go: pick one under <i>saved boards</i>, and opening a .kicad_pcb you laid out before offers its layout back. <b>Project file</b> (.json): the same thing as a file, to move to another computer or keep next to the board in the repo (e.g. <code>hardware/monk/openpnp/monk_panel_project.json</code>).">i</span></div>
   <select id="recentSel" style="max-width:100%;margin-bottom:6px"></select>
 
   <details open>
@@ -197,7 +197,7 @@ td input[type=number] { width: 58px; }
       <button class="primary" id="stlBtn" title="A .zip with a folder holding one STL per stand, named number_ref">Stands (.zip, one STL each)</button>
       <button id="stlAllBtn" title="All stands laid out side by side in a single STL">All in one STL</button>
       <button id="scadBtn">OpenSCAD</button>
-      <button id="printBtn">Print sheet</button>
+      <button id="printBtn" class="printMap">🖨 Print map</button>
     </div>
     <div class="row" id="perStand"></div>
   </details>
@@ -244,7 +244,7 @@ td input[type=number] { width: 58px; }
     </div>
     <label><span>Clearance to other things</span><input type="number" id="tp_gap" step="0.5"></label>
     <div style="overflow-x:auto"><table id="lineTable"><thead><tr><th title="in a tray / feeder (untick = hand place)">use</th><th>#</th><th>value</th><th>qty</th><th>parts</th><th title="tray / lane, or Opulo feeder / channel @ mm from the first end">where</th><th>tape</th><th>pitch</th><th>carrier</th></tr></thead><tbody></tbody></table></div>
-    <div class="row"><button class="primary" id="trayPackBtn" title="Repack the sections and auto-place every tray (forgets trays you moved)">Pack + place trays</button><button id="trayZipBtn" title="One STL per tray and sections.csv in a .zip">Trays (.zip)</button><button id="trayCsvBtn" title="Which line goes where (sections / feeder strips)">Setup CSV</button></div>
+    <div class="row"><button class="primary" id="trayPackBtn" title="Repack the sections and auto-place every tray (forgets trays you moved)">Pack + place trays</button><button id="trayZipBtn" title="One STL per tray and sections.csv in a .zip">Trays (.zip)</button><button id="trayCsvBtn" title="Which line goes where (sections / feeder strips)">Setup CSV</button><button class="printMap" title="Placement map + loading list (letter landscape)">🖨 Print map</button></div>
     <div id="trayStatus"></div>
     <div id="trayList" class="out" style="margin-top:6px"></div>
   </details>
@@ -954,7 +954,7 @@ function sheetModel() {
 }
 const sheetDoc = () => SH.sheetDocument(sheetModel());
 // print from a hidden frame: the sheet keeps its own page setup (letter landscape) and the page stays as it is
-$('printBtn').onclick = () => {
+function printMap() {
   if (!M || (!RES && !TRAYS)) return setStatus('Nothing to print yet: load a board or a BOM', 'bad');
   const old = $('printFrame'); if (old) old.remove();
   const fr = document.createElement('iframe');
@@ -963,7 +963,8 @@ $('printBtn').onclick = () => {
   fr.onload = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { setStatus('Print failed: ' + e.message, 'bad'); } };
   fr.srcdoc = sheetDoc();
   document.body.appendChild(fr);
-};
+}
+document.querySelectorAll('.printMap').forEach((b) => { b.onclick = printMap; });
 // ------------------------------------------------------------ projects: a file to move between computers / keep in a repo,
 // and one saved layout per board in this browser (so opening another board doesn't lose the panel's layout)
 const PROJECT_FORMAT = 1;

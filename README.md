@@ -30,7 +30,7 @@ Open `pnp_stand.html` in a browser (double-click it; it works offline). Open `pn
    allowed, preferring a spot near the board's current position, near the camera, or near the front-left corner.
    *Refine here* searches ±40 mm around the current spot.
 5. **Export**: a .zip with a folder holding one STL per stand (`1_H1.stl`, …; each is one closed solid), or all stands
-   in one STL, or a single stand. Also editable OpenSCAD, project JSON, and the **print sheet** (*Print sheet*, letter
+   in one STL, or a single stand. Also editable OpenSCAD, project JSON, and the **print sheet** (*🖨 Print map*: top of the page, section 5 or 6; letter
    landscape): page 1 a map of the plates seen from above (front at the bottom, cropped to what's used) with the board,
    each stand and its grid holes, every tray / Opulo feeder with its bolt holes and each cut strip where it goes; page 2
    the loading list (per tray / feeder: lane or channel, start, cut length, line, value, refs, qty, tape) with tick
