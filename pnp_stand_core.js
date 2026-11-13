@@ -388,7 +388,7 @@
 
   // ------------------------------------------------------------------ stand parameters
   const DEFAULT_STAND = {
-    height: 8.6,       // plate top to PCB bottom (top of the riser), mm; our stands: body 6.14 + riser 2.46
+    height: 10,        // plate top to PCB bottom, mm. 10 = used on the LumenPnP (2 boards): body 8 + step-up 2
     wall: 2.0,         // material around holes / pockets
     boltD: 3.6,        // M3 clearance (measured screw 2.89; 3.4 printed tight)
     pocket: 'hex',     // 'hex' nut trap at the top, 'round' counterbore for a screw head, 'none'
@@ -409,7 +409,7 @@
     maxPair: 31,       // max distance between the two bolts of one stand
     underPenalty: 4,   // cost added for a bolt hidden under the PCB
     standGap: 1.0,     // min gap between two stands
-    stepH: 2.46,       // step-up: body top sits this far below the PCB; only a boss (or the corner pad) reaches it. 0 = flat
+    stepH: 2.0,        // step-up: body top sits this far below the PCB; only a boss (or the corner pad) reaches it. 0 = flat
     bossD: 0,          // boss under the pin / blind hole, 0 = auto (fixing + 2 x 1.4 mm, min 4.5)
     label: true,       // engrave the stand number (1 = board lower-left, counting anticlockwise) into the top
     labelH: 4.5,

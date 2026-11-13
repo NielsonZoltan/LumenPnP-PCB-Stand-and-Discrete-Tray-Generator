@@ -83,7 +83,7 @@ contents. *Parts (BOM)* is the line table; click a line to jump to its tray / fe
    Tape width, pitch and carrier (paper / embossed) come from a package table (EIA-481 typical) and can be changed per
    line; ⚠ marks a guess (connectors, switches, packages by body size). Sprocket holes go toward the front of each lane.
 
-   **Holder = Opulo LumenPnP printed tray feeders** (instead of printing our trays). Opulo sells them as "strip feeders"
+   **Holder = Opulo LumenPnP printed tray feeders** (the default; the other choice prints our own trays). Opulo sells them as "strip feeders"
    but its own setup guide uses them as OpenPnP *tray* feeders: a pick location, a per-part offset and a count, no
    sprocket-hole vision, so a cut strip can start anywhere in a channel. Each ticked line gets a section with the same
    length rule as our trays ((parts + empty pockets) × pitch + slack, at least the shortest section); a line longer than
@@ -99,7 +99,7 @@ contents. *Parts (BOM)* is the line table; click a line to jump to its tray / fe
    OpenPnP export (section 7) writes a ReferenceTrayFeeder per section (`PLAN-<line>`, or `PLAN-<line>-<k>` for a
    split line): first part at the back, next parts toward the front (offset −pitch in Y, like the host's own); position
    the camera on the first part, capture, set Z and rotation.
-   *Line longer than a channel* = refill gives such a line one full channel and lists how many more to slide in as
+   *Line longer than a channel* = refill (the default) gives such a line one full channel and lists how many more to slide in as
    it runs out (reset the feeder count each time) instead of splitting it over channels. Placement: every pick goes
    feeder → bottom camera → board, and only the feeder → camera leg depends on the layout, so channels and feeders are
    ordered busiest first and placed nearest the bottom camera (the `camera` keep-out); the status line shows the
@@ -136,6 +136,119 @@ contents. *Parts (BOM)* is the line table; click a line to jump to its tray / fe
    `--machine` = the values are machine X/Y, not the Placements-table values. `--fid-part` = a fiducial part id that
    already exists in that machine's config.
 
+## Settings reference
+
+Every setting the page saves, its key in the project JSON and the browser's saved state, and the default a new browser
+starts from. Defaults marked *used on the machine* are what two boards were assembled with on a LumenPnP v3.1; the rest
+are first guesses. A saved project keeps its own values, so a changed default only reaches it through *Reset stand to
+defaults* or by editing the field.
+
+**Machine** (section 1): profile `v3.1` (bottom camera in the plate, keep-out `camera d20 52`) or `v4` (camera beside
+the plates); two plates, lower (front) `a–g` with a at the front, upper (rear) `A–G` with A at the rear, row 1 on the
+left. Plate dimensions, under *Plate dimensions* (key `cfg.plate`):
+
+| Setting (page) | Key | Default | Notes |
+|---|---|---|---|
+| Length (mm) | `length` | `600` | plate length, mm |
+| Width (mm) | `width` | `120` | plate width, mm |
+| Hole pitch (mm) | `pitch` | `15` | hole pitch, mm |
+| First hole from edge | `edge` | `15` | first hole from the plate edge, mm |
+| *(project JSON only)* | `holeD` | `3.4` | grid hole diameter, mm |
+| Gap between plates | `gap` | `0` | gap between the two plates, mm |
+| Plate screw inset | `screwInset` | `10` | plate screws from each corner, mm (always keep-outs) |
+| Plate screw keep-out ⌀ | `screwKeepD` | `11` | keep-out diameter round each plate screw, mm |
+
+**Stands** (section 3, expert fields under *Advanced*; key `sp`). *Bolt size preset* fills `boltD`, `nutAF`, `nutH` and
+`headD`: M3 as measured (default), M2 / M2.5 / M3 / M4 ISO.
+
+| Setting (page) | Key | Default | Notes |
+|---|---|---|---|
+| Height: plate → PCB bottom | `height` | `10` | plate top to PCB bottom, mm. 10 = used on the LumenPnP (2 boards): body 8 + step-up 2 |
+| Wall | `wall` | `2.0` | material around holes / pockets |
+| Bolt clearance ⌀ | `boltD` | `3.6` | M3 clearance (measured screw 2.89; 3.4 printed tight) |
+| Top of bolt hole | `pocket` | `hex` | 'hex' nut trap at the top, 'round' counterbore for a screw head, 'none' |
+| Nut across flats | `nutAF` | `5.34` | nut across flats as measured (pocketClr is added) |
+| Head ⌀ | `headD` | `5.5` | M3 socket head |
+| Nut height | `nutH` | `4.0` | nut height as measured; the stand pocket and the tray caps must take it |
+| Pocket clearance | `pocketClr` | `0.3` | added to the nut / head pocket and the bolt hole, mm |
+| Floor under nut | `pocketFloor` | `1.93` | plastic left under the nut / screw head; the pocket fills the body above it |
+| Bolts per stand | `bolts` | `2` | 1 = can swing about its bolt; 2 = second bolt locks the angle |
+| PCB fixing | `iface` | `pin` | 'pin' printed locating pin, 'hole' blind hole (dowel / screw / heat-set insert) |
+| Pin clearance (radial) | `pinClr` | `0.25` | pin = PCB hole - 2*clr (0.15 printed tight) |
+| Board thickness (from file) | `pcbThick` | `1.6` | board thickness (read from the .kicad_pcb); sets the pin length and the corner wall height |
+| Pin tip above board top | `pinAbove` | `0.3` | pin tip above the board's top face (negative = stops inside the hole) |
+| Blind hole ⌀ (0 = PCB hole) | `ifaceHoleD` | `0` | 'hole' mode diameter, 0 = PCB hole diameter |
+| Blind hole depth | `ifaceHoleDepth` | `6` |  |
+| Min pad radius under PCB | `padMin` | `3.5` | min radius of the support pad under the PCB hole |
+| Max arm (PCB hole → bolt) | `maxArm` | `26` | max distance PCB hole → bolt |
+| Max bolt spacing | `maxPair` | `31` | max distance between the two bolts of one stand |
+| Penalty: bolt under PCB | `underPenalty` | `4` | cost added for a bolt hidden under the PCB |
+| Gap between stands | `standGap` | `1.0` | min gap between two stands |
+| Step-up (body below PCB by) | `stepH` | `2.0` | step-up: body top sits this far below the PCB; only a boss (or the corner pad) reaches it. 0 = flat |
+| Boss ⌀ under pin (0 = auto) | `bossD` | `0` | boss under the pin / blind hole, 0 = auto (fixing + 2 x 1.4 mm, min 4.5) |
+| Engrave number on side | `label` | `true` | engrave the stand number (1 = board lower-left, counting anticlockwise) into the top |
+| Number height / depth | `labelH` | `4.5` | number height, mm |
+| Number height / depth | `labelDepth` | `0.6` | engraving depth, mm |
+| Support pad (square) | `cornerPad` | `6` | corner mode: square support under the board corner |
+| Edge clearance | `cornerGap` | `0.2` | corner mode: board edge to wall clearance |
+| L-wall thickness | `cornerWall` | `1.6` | corner mode: L-wall thickness |
+| L-wall top below board top | `lipBelow` | `0.4` | corner mode: wall top this far below the board's top face |
+| Clearance under board | `underClear` | `0` | tallest part on the board's down-facing side (2nd pass of a double-sided board), 0 = none |
+
+**Cut tape: common** (section 4; key `tray.tp`). Loading a DigiKey order sets boards per run to 1 and spares to 0.
+
+| Setting (page) | Key | Default | Notes |
+|---|---|---|---|
+| Boards per run | `boards` | `1` | boards per run |
+| Spare parts per line | `spares` | `2` | extra parts per line (cut tape is never exact) |
+| Empty pockets at the start | `leader` | `1` | empty pockets at the start of each strip |
+| Slack at section end | `endClr` | `1.5` | slack at the end of each section, mm |
+| Shortest section | `minSection` | `16` | shortest section (tape region), mm: room to handle the strip and for 3+ sprocket holes |
+| Clearance to other things | `gap` | `2.0` | clearance to stands, board, keep-outs and other trays |
+
+**Opulo tray feeders** (*Holder* = Opulo, the default):
+
+| Setting (page) | Key | Default | Notes |
+|---|---|---|---|
+| Holder | `holder` | `opulo` | 'opulo' = Opulo LumenPnP printed tray feeders (used on the machine), 'tray' = our printed cut-tape trays (not test-printed) |
+| Feeder types | `opTypes` | `8:3:40:15 12:3:56.2:15 16:2:48:20 24:1:36 32:1:44` | Opulo feeder per tape width: W:channels:width across[:channel pitch] |
+| Feeders you have | `opHave` | *(empty)* | feeders you own per width, '8:10 12:2' (empty = no limit) |
+| Gap between sections | `opGap` | `5` | gap between two sections in one channel, mm |
+| Line longer than a channel | `opRefill` | `true` | a line longer than a channel: true = one channel, slide more in as it runs out (used on the machine), false = split over channels |
+| Feeder length | `opLen` | `120` | Opulo feeder length (all widths) |
+| Usable channel length | `opUsable` | `116` | channel length that can hold parts (Opulo: 125 mm strip in the 120 mm feeder, 30 parts at 4 mm; guess) |
+| Orientation | `opOrient` | `90` | 90 = channels run front to back across the plate (bolts like A15 + G15), 180 = along the rows |
+| Pick Z above plate | `opZ` | `10.7` | pick Z above the plate top. Measured on a LumenPnP v3.1 (2 boards): picks at Z 14.9-15.2 with the plate top at 4.4 (board top 16.0 = 4.4 + 10 stand + 1.6): 10.5-10.8 |
+
+**Printed cut-tape trays** (*Holder* = our trays; not test-printed yet):
+
+| Setting (page) | Key | Default | Notes |
+|---|---|---|---|
+| Channel = tape + | `chClr` | `0.3` | channel = tape width + this |
+| Rib between lanes | `rib` | `1.6` | wall between lanes |
+| Side wall | `sideWall` | `2.0` | outer wall along the tray |
+| Floor under pocket relief | `base` | `1.2` | plastic under the deepest pocket relief |
+| Paper tape recess | `recessPaper` | `1.0` | paper tape: channel floor this far below the tray top |
+| Embossed shoulder recess | `recessEmb` | `0.6` | embossed tape: shoulder (carrier film) this far below the top |
+| Embossed pocket relief | `groove` | `2.6` | embossed tape: relief for the pockets, below the shoulder |
+| Label block length | `labelBlock` | `4.0` | solid block at the start of each section, carries the engraved line number |
+| Number height / depth | `labelH` | `3.0` | number height, mm |
+| Number height / depth | `labelDepth` | `0.5` | engraving depth, mm |
+| Max tray width | `maxTrayW` | `90` | widest tray (across the lanes) |
+| Lane length (0 = least area) | `laneLen` | `0` | channel length between the caps; 0 = choose the one using the least plate area |
+| Sections per lane | `series` | `true` | several sections may share one lane end to end |
+
+**Machine position / OpenPnP** (section 5; key `op`):
+
+| Setting (page) | Key | Default | Notes |
+|---|---|---|---|
+| Machine position | `frame` | `fids` | how plate coordinates become machine X/Y: 'fids' taught fiducials, 'hole' a reference grid hole, 'none' |
+| Values are | `fidMode` | `machine` | taught values are machine X/Y from the DRO ('machine') or OpenPnP Placements-table values |
+| Board top Z (measured) | `boardZ` | *(empty)* | measured board top Z; sets the job Z and moves every feeder Z with it |
+| Plate top Z (machine) | `plateZ` | `0` | machine Z of the bare plate top (used when no board Z is measured) |
+| Fiducial part id | `fidPart` | *(empty)* | a fiducial part id that already exists in the machine config |
+| Lines not in a tray / feeder | `notInTray` | `ignore` | BOM lines not in a holder: 'ignore' (hand place) or 'place' (feed them yourself) |
+
 ## Grid model
 
 The plate is 600 × 120 mm with a 15 mm pitch, and the first hole is 15 mm in from each edge, so 39 rows × 7 letters. The
@@ -154,14 +267,14 @@ in from each corner and are always keep-outs. Edit *Plate dimensions* if a plate
 | `pnp_tray_core.js` | BOM grouping, tape table, section/lane/tray packing, tray placement, tray STL; Opulo strip-feeder packing and placement (no DOM; Node-testable) |
 | `pnp_sheet.js` | the print sheet (placement map + loading list) from plain data; the page builds the data (`sheetModel()`) |
 | `fit_fiducials.js` | moves an exported OpenPnP project onto the machine from taught fiducials + measured board Z (Node CLI, also a module) |
-| `test_core.js` | `node test_core.js [board.kicad_pcb] [out_dir] [corner board] [bom.csv]`: grid, stands, trays, closed meshes |
+| `test_core.js` | `node test_core.js [board.kicad_pcb] [out_dir] [corner board] [bom.csv]`: grid, stands, trays, closed meshes, and that the README *Settings reference* matches the code defaults (change both together) |
 | `vendor/jscad-modeling.min.js` | [@jscad/modeling](https://github.com/jscad/OpenJSCAD.org) 2.12.5, MIT (`vendor/jscad-LICENSE.txt`); unpkg fallback |
 
 ## On another computer
 
 - The page needs only a browser: open `pnp_stand.html` from a clone (the scripts are next to it, `vendor/` included).
   Its settings live in that browser's localStorage, so a new machine starts from the defaults: check the stand height
-  (8.6 mm default) and floor under the nut (1.93 mm) before exporting. *Export → project JSON* carries a layout across.
+  (10 mm default) and floor under the nut (1.93 mm) before exporting. *Export → project JSON* carries a layout across.
 - `fit_fiducials.js` and `test_core.js` need Node 18+. The merge script needs Python 3 (no packages) and runs on the PnP
   host, with OpenPnP closed. OpenPnP's config is `~/.openpnp2` on Linux and Windows alike.
 - Keep a board's live PnP state (taught fiducials, measured Z, what's merged on the host) in a README next to its

@@ -90,9 +90,10 @@ if (res.best) {
       if (inside && v[0][2] < S.bodyTop(sp) - 0.01) topOfFloor = Math.max(topOfFloor, v[0][2]);
     }
     assert(Math.abs(topOfFloor - sp.pocketFloor) < 0.01, `plastic under the nut = ${topOfFloor.toFixed(2)} mm (set ${sp.pocketFloor})`);
-    // nut height: the default 4 mm nut fits the default pocket; a 5 mm nut is reported as sticking out
-    const fits = !sp.notes.some((n) => /sticks out/.test(n)), tall = S.effectiveStand({ ...S.DEFAULT_STAND, nutH: 5 }).notes.some((n) => /sticks out/.test(n));
-    assert(fits && tall && Object.values(S.BOLT_PRESETS).every((b) => b.boltD > 0 && b.nutAF > b.boltD && b.nutH > 0), `nut height checked against the pocket (${sp.nutH} mm fits, 5 mm reported); ${Object.keys(S.BOLT_PRESETS).length} bolt presets`);
+    // nut height: the default nut fits the default pocket; a nut 1 mm taller than the pocket is reported as sticking out
+    const pocketDepth = S.bodyTop(sp) - sp.pocketFloor, tallNut = +(pocketDepth + 1).toFixed(2);
+    const fits = !sp.notes.some((n) => /sticks out/.test(n)), tall = S.effectiveStand({ ...S.DEFAULT_STAND, nutH: tallNut }).notes.some((n) => /sticks out/.test(n));
+    assert(fits && tall && Object.values(S.BOLT_PRESETS).every((b) => b.boltD > 0 && b.nutAF > b.boltD && b.nutH > 0), `nut height checked against the pocket (${sp.nutH} mm fits the ${pocketDepth.toFixed(2)} mm pocket, ${tallNut} mm reported); ${Object.keys(S.BOLT_PRESETS).length} bolt presets`);
   }
   // each stand on its own is a closed mesh (every edge shared by exactly 2 triangles), so the slicer needs no repair
   const perStand = result.stands.map((st) => S.stlBinary(S.printLayout([st], sp, jscad), jscad));
@@ -342,4 +343,19 @@ const O = require('./pnp_openpnp_core.js');
   assert(vb[0] <= 220 - 15 && vb[0] + vb[2] >= 414.4 + 15 && vb[0] > 0 && vb[0] + vb[2] < 600, `sheet: map cropped to holders + board (x ${vb[0]}..${(vb[0] + vb[2]).toFixed(0)})`);
   assert(/>a15</.test(doc) && />c23</.test(doc) && />b24</.test(doc) && doc.includes('#1 100nF ×56') && doc.includes('O2: no free spot') && doc.includes('MCU'),
     'sheet: bolt holes, strip labels, unplaced holder warning and hand-place list on it');
+}
+
+// README "Settings reference" lists every saved setting with the code's default (keeps the docs in step with the code)
+{
+  const readme = fs.readFileSync(path.join(__dirname, 'README.md'), 'utf8').replace(/\r\n/g, '\n');
+  const part = (from, to) => { const i = readme.indexOf(from), j = readme.indexOf(to, i + 1); return i < 0 || j < 0 ? '' : readme.slice(i, j); };
+  const cell = (txt, k) => { const r = txt.match(new RegExp('[|] `' + k + '` [|] ([^|]*) [|]')); return r ? r[1].trim().replace(/`/g, '') : null; };
+  const same = (c, v) => c !== null && (typeof v === 'number' ? Number(c) === v : typeof v === 'boolean' ? c === String(v) : v === '' ? /empty/.test(c) : c === v);
+  const check = (what, txt, defs) => {
+    const bad = Object.entries(defs).filter(([k, v]) => !same(cell(txt, k), v)).map(([k, v]) => `${k} (code ${JSON.stringify(v)}, README ${JSON.stringify(cell(txt, k))})`);
+    assert(txt && !bad.length, `README settings reference: ${what} keys and defaults match the code` + (bad.length ? `: ${bad.join(', ')}` : ''));
+  };
+  check('plate', part('Plate dimensions', '**Stands**'), S.PROFILES['v3.1'].plate);
+  check('stand', part('**Stands**', '**Cut tape: common**'), S.DEFAULT_STAND);
+  check('cut tape', part('**Cut tape: common**', '**Machine position / OpenPnP**'), T.DEFAULT_TRAY);
 }

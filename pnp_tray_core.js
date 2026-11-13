@@ -39,11 +39,11 @@
     laneLen: 0,         // channel length between the caps; 0 = choose the one using the least plate area
     series: true,       // several sections may share one lane end to end
     gap: 2.0,           // clearance to stands, board, keep-outs and other trays
-    holder: 'tray',     // 'tray' = our printed cut-tape trays, 'opulo' = Opulo LumenPnP printed tray feeders
+    holder: 'opulo',    // 'opulo' = Opulo LumenPnP printed tray feeders (used on the machine), 'tray' = our printed cut-tape trays (not test-printed)
     opTypes: '8:3:40:15 12:3:56.2:15 16:2:48:20 24:1:36 32:1:44', // Opulo feeder per tape width: W:channels:width across[:channel pitch]
     opHave: '',         // feeders you own per width, '8:10 12:2' (empty = no limit)
     opGap: 5,           // gap between two sections in one channel, mm
-    opRefill: false,    // a line longer than a channel: false = split over channels, true = one channel, slide more in as it runs out
+    opRefill: true,     // a line longer than a channel: true = one channel, slide more in as it runs out (used on the machine), false = split over channels
     opLen: 120,         // Opulo feeder length (all widths)
     opUsable: 116,      // channel length that can hold parts (Opulo: 125 mm strip in the 120 mm feeder, 30 parts at 4 mm; guess)
     opOrient: 90,       // 90 = channels run front to back across the plate (bolts like A15 + G15), 180 = along the rows
