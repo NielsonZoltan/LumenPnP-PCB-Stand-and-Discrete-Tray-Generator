@@ -1,6 +1,21 @@
-# pnp_stand: PCB stands for the LumenPnP staging plates
+# LumenPnP PCB Stand and Discrete Tray Generator
 
-Open `pnp_stand.html` in a browser (double-click it; it works offline). Open `pnp_stand.html#demo` to see a sample board.
+A single-page, offline tool for the [Opulo LumenPnP](https://github.com/opulo-inc/lumenpnp) staging plates. From a KiCad
+`.kicad_pcb` (and optionally its BOM) it:
+
+- places the board on the plate grid and generates **3D-printable PCB stands** (STL / OpenSCAD) bolted into the plate holes,
+  using the board's mounting holes or, with none, its corners;
+- packs the BOM's cut tape into **printable discrete-part trays**, or into **Opulo's printed tray feeders**, and places them
+  around the board;
+- exports an **OpenPnP starter project** (board, job, parts, packages, feeders, and a merge script for `~/.openpnp2`),
+  optionally fitted to the machine from taught fiducials;
+- prints a **placement map and loading list** for setting up the plates.
+
+**Quick start:** clone, open `pnp_stand.html` in a browser (double-click it; it works offline). Open
+`pnp_stand.html#demo` to see a sample board. Node 18+ is only needed for the CLI and the tests.
+
+Status: used on one LumenPnP (v3.1, rev00 plates) for a 64.8 mm panel. See *Not verified yet* at the end before trusting
+a default. Issues and pull requests welcome.
 
 Layout (like KiCad / PrusaSlicer): **top bar** = open board / BOM / project, save, *Auto-place board*, *Pack + place*,
 *🖨 Print map*, OpenPnP, *Export everything*, and the step chips (click one to jump). **Left** = setup: 1 Machine, 2 Board, 3 Stands
@@ -11,7 +26,7 @@ board's position, rotation and auto-place options; a stand's holes and its STL; 
 contents. *Parts (BOM)* is the line table; click a line to jump to its tray / feeder.
 
 1. **Machine**: pick the profile (v3/v3.1 has the bottom camera in a plate; on v4 the camera is beside the plates), the
-   number of plates, and for each plate its letter case and which edge A is on. Our rev00 plates run A–G, then G–A on the
+   number of plates, and for each plate its letter case and which edge A is on. The rev00 plates (as measured on ours) run A–G, then G–A on the
    next plate: lower (front) plate `a–g`, upper (rear) plate `A–G`. Grid holes are named letter + row, e.g. `d24`, `D24`.
    Keep-outs are text, one per line (`camera d20 52`, `rect d16 g19`, `block c5 e5`, …). Click a grid hole to block it.
 2. **PCB**: open a `.kicad_pcb`. The Edge.Cuts outline sets the size. NPTH holes of at least the minimum diameter, and
@@ -26,7 +41,7 @@ contents. *Parts (BOM)* is the line table; click a line to jump to its tray / fe
    nut), the placement panel says so. Hex nut trap or counterbore on top,
    printed locating pin or a blind hole for a dowel, screw or insert, max arm length.
    *Step-up* (default 2 mm): the body stops below the PCB and only a boss under the pin, or the corner pad, reaches it.
-   That gives the thin pin a wide base to print on and saves material (−20 % on the F28 panel stands).
+   That gives the thin pin a wide base to print on and saves material (−20 % on a test panel's stands).
    Board thickness comes from the file (`general.thickness`, editable). The pin is that thickness + *pin tip above board
    top* (0.3 mm), and in corner mode the L-wall top sits *wall top below board top* (0.4 mm) under the board's top face.
    **Double-sided boards**: for the second pass set *Side up = bottom* (the board is mirrored, and the same physical
@@ -49,7 +64,7 @@ contents. *Parts (BOM)* is the line table; click a line to jump to its tray / fe
 6. **Cut-tape trays**: open the KiCad BOM CSV (`fab/<board>_bom.csv`, Qty per board), or a **DigiKey order CSV**
    (with the .kicad_pcb open: lines come from the board's footprints, quantities from the order matched by MPN, else
    value + package; substitutions and anything not matched are listed; boards per run is set to 1 and spares to 0). Lines are grouped into one per reel by
-   value + footprint, the same rule as `tools/bom_reels.py` (MS-07). Untick the lines that go on feeders or are placed by
+   normalised value + footprint (100nF = 0.1uF, 4k7 = 4.7k; voltage / dielectric words ignored). Untick the lines that go on feeders or are placed by
    hand (a QFP is unticked by default: it normally comes in a JEDEC tray). Each ticked line gets one **section**: a label
    block with its line number engraved, then a channel for the cut tape, long enough for
    (qty × boards per run + spares + empty pockets at the start) × part pitch. Sections of one tape width share a lane
@@ -98,7 +113,7 @@ contents. *Parts (BOM)* is the line table; click a line to jump to its tray / fe
    chosen one is filled in, and *none* asks first. *Export everything* puts stand STLs, tray STLs, the setup CSV, the
    print sheet, the OpenPnP project and the project JSON in one zip. The chips under the title show which step is
    done; long help sits behind the *i* icons.
-   The XML uses only attributes older OpenPnP builds also read (a 2.x build on the Fedora PnP host refused `mark` on a
+   The XML uses only attributes older OpenPnP builds also read (a 2.x build refused `mark` on a
    footprint pad and would not start until the config was restored).
 
    **Fitting an export that's already out** (plate coordinates, or re-teaching later) without the page: load the job,
@@ -106,7 +121,7 @@ contents. *Parts (BOM)* is the line table; click a line to jump to its tray / fe
    note the machine X/Y from the DRO). Then, with the exported folder:
 
    ```
-   node tools/pnp_stand/fit_fiducials.js <export dir> <out dir> FIDP1=x,y FIDP2=x,y FIDP3=x,y --z <board top Z> [--fid-part <id>] [--machine]
+   node fit_fiducials.js <export dir> <out dir> FIDP1=x,y FIDP2=x,y FIDP3=x,y --z <board top Z> [--fid-part <id>] [--machine]
    ```
 
    It fits one rotation + shift through the fiducials (residuals printed; > 0.2 mm means a fiducial was taught on the
@@ -133,7 +148,7 @@ in from each corner and are always keep-outs. Edit *Plate dimensions* if a plate
 | `pnp_tray_core.js` | BOM grouping, tape table, section/lane/tray packing, tray placement, tray STL; Opulo strip-feeder packing and placement (no DOM; Node-testable) |
 | `pnp_sheet.js` | the print sheet (placement map + loading list) from plain data; the page builds the data (`sheetModel()`) |
 | `fit_fiducials.js` | moves an exported OpenPnP project onto the machine from taught fiducials + measured board Z (Node CLI, also a module) |
-| `test_core.js` | `node tools/pnp_stand/test_core.js [board.kicad_pcb] [out_dir] [corner board] [bom.csv]`: grid, stands, trays, closed meshes |
+| `test_core.js` | `node test_core.js [board.kicad_pcb] [out_dir] [corner board] [bom.csv]`: grid, stands, trays, closed meshes |
 | `vendor/jscad-modeling.min.js` | [@jscad/modeling](https://github.com/jscad/OpenJSCAD.org) 2.12.5, MIT (`vendor/jscad-LICENSE.txt`); unpkg fallback |
 
 ## On another computer
@@ -143,8 +158,8 @@ in from each corner and are always keep-outs. Edit *Plate dimensions* if a plate
   (8.6 mm default) and floor under the nut (1.93 mm) before exporting. *Export → project JSON* carries a layout across.
 - `fit_fiducials.js` and `test_core.js` need Node 18+. The merge script needs Python 3 (no packages) and runs on the PnP
   host, with OpenPnP closed. OpenPnP's config is `~/.openpnp2` on Linux and Windows alike.
-- A board's live PnP state (taught fiducials, measured Z, what's merged on the host) is written down next to its
-  project, e.g. `hardware/monk/openpnp/README.md` in the F28386D repo.
+- Keep a board's live PnP state (taught fiducials, measured Z, what's merged on the host) in a README next to its
+  exported project, so the next run starts from it.
 
 ## Next: job planner
 
@@ -154,9 +169,9 @@ slots on the plates → OpenPnP starter config. Opulo's strip feeder models are 
 
 ## Not verified yet
 
-- OpenPnP: the files load in OpenPnP 2.4 (merged into a copy of the default config). On the PnP host the MONK panel
-  job loads and its fiducials were taught (fit residual ≤ 0.07 mm); the merge with the fixed parts / packages and an
-  actual pick and place haven't run yet. Bottom-side placements (none on MONK) and the board rotation with the axis
+- OpenPnP: the files load in OpenPnP 2.4 (merged into a copy of the default config). On a LumenPnP host a 64.8 mm test
+  panel's job loads and its fiducials were taught (fit residual ≤ 0.07 mm); the merge with the fixed parts / packages and an
+  actual pick and place haven't run yet. Bottom-side placements (none on that panel) and the board rotation with the axis
   flips are not checked.
 - Tray fit: channel clearance (tape + 0.3), recess depths and the embossed pocket relief (2.6 mm) are first guesses.
   Print one tray and adjust in *Tray dimensions*. Cut tape tends to curl; hold the strip ends down with Kapton if needed.
@@ -174,3 +189,7 @@ slots on the plates → OpenPnP starter config. Opulo's strip feeder models are 
 - Machine axis directions for the OpenPnP readout (one reference hole, axes assumed parallel to the plates; there are
   flip toggles).
 - Print fit (pin clearance, nut trap) hasn't been test-printed. Tune `pinClr` / `pocketClr` after the first print.
+
+## License
+
+MIT, see [LICENSE](LICENSE). `vendor/jscad-modeling.min.js` is @jscad/modeling, MIT, see `vendor/jscad-LICENSE.txt`.

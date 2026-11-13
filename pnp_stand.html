@@ -128,7 +128,7 @@ td input[type=number] { width: 58px; }
     <button id="openBom" title="KiCad BOM CSV (Qty per board), or a DigiKey order CSV (Qty = what you ordered; needs the .kicad_pcb open)">📂 BOM / order</button><input type="file" id="bomFile" accept=".csv" hidden>
     <button id="loadBtn" title="Open a project file (.json)">📂 Project</button><input type="file" id="loadFile" accept=".json" hidden>
     <button id="saveBtn" title="Save the project file (.json): board, stands, BOM, trays / feeders, machine position">💾 Save</button>
-    <select id="recentSel" title="Layouts saved in this browser, one per board"></select><span class="info" tabindex="0" data-tip="<b>This browser</b> keeps every board’s layout on its own (board, stands, BOM, trays / feeders, machine position, taught fiducials), saved as you go: pick one under <i>saved boards</i>, and opening a .kicad_pcb you laid out before offers its layout back. <b>Project file</b> (.json): the same thing as a file, to move to another computer or keep next to the board in the repo (e.g. <code>hardware/monk/openpnp/monk_panel_project.json</code>).">i</span>
+    <select id="recentSel" title="Layouts saved in this browser, one per board"></select><span class="info" tabindex="0" data-tip="<b>This browser</b> keeps every board’s layout on its own (board, stands, BOM, trays / feeders, machine position, taught fiducials), saved as you go: pick one under <i>saved boards</i>, and opening a .kicad_pcb you laid out before offers its layout back. <b>Project file</b> (.json): the same thing as a file, to move to another computer or keep next to the board in the repo (e.g. <code>openpnp/&lt;board&gt;_project.json</code>).">i</span>
   </div>
   <div class="tgroup">
     <button class="primary" id="autoBtn" title="Place the board where its stands fit (rotations and preference: select the board)">Auto-place board</button>
@@ -222,7 +222,7 @@ td input[type=number] { width: 58px; }
   </details>
 
   <details open>
-    <summary>4 · Cut tape<span class="info" tabindex="0" data-tip="One BOM line per reel (grouped by value + footprint like <code>bom_reels.py</code>). Each line gets a section of cut tape: (parts + empty pockets) × pitch. <b>Our trays</b>: sections share lanes, lanes share trays, printed here. <b>Opulo tray feeders</b>: sections go end to end in the channels of Opulo’s printed feeders (8 / 12 mm: 3 channels) with a gap between them, busiest feeders nearest the bottom camera; OpenPnP gets one tray feeder per section. Drag a tray or feeder to move it.">i</span></summary>
+    <summary>4 · Cut tape<span class="info" tabindex="0" data-tip="One BOM line per reel (grouped by normalised value + footprint). Each line gets a section of cut tape: (parts + empty pockets) × pitch. <b>Our trays</b>: sections share lanes, lanes share trays, printed here. <b>Opulo tray feeders</b>: sections go end to end in the channels of Opulo’s printed feeders (8 / 12 mm: 3 channels) with a gap between them, busiest feeders nearest the bottom camera; OpenPnP gets one tray feeder per section. Drag a tray or feeder to move it.">i</span></summary>
     <label><span>Holder</span><select id="tp_holder"><option value="tray">our cut-tape trays (printed here)</option><option value="opulo">Opulo LumenPnP printed tray feeders</option></select></label>
     <div id="bomInfo" class="muted"></div>
     <label><span>Boards per run</span><input type="number" id="tp_boards" step="1" min="1"></label>

@@ -1,7 +1,7 @@
 /*
  * pnp_tray_core.js: cut-tape trays for the LumenPnP staging plates (no DOM; Node-testable).
  *
- * BOM CSV -> one line per reel (same grouping as tools/bom_reels.py, series rule MS-07) -> one section of cut tape per
+ * BOM CSV -> one line per reel (grouped by normalised value + footprint) -> one section of cut tape per
  * line. A section is a label block (engraved line number) followed by a channel the tape strip lies in. Sections of
  * the same tape width can share a lane end to end; lanes sit side by side in a tray. Each tray has an end cap at both
  * ends, centred on a grid row, with M3 bolts into the plate holes under it (nut on top, like the stands).
@@ -75,7 +75,7 @@
   }
 
   const MULT = { p: 1e-12, n: 1e-9, u: 1e-6, 'µ': 1e-6, m: 1e-3, R: 1, r: 1, k: 1e3, K: 1e3, M: 1e6, '': 1 };
-  /** Same normalisation as bom_reels.value_key: 100nF = 0.1uF, 4k7 = 4.7k; voltage / dielectric words dropped */
+  /** Value normalisation for reel grouping: 100nF = 0.1uF, 4k7 = 4.7k; voltage / dielectric words dropped */
   function valueKey(kind, value) {
     const v = String(value).split('(')[0].trim();
     if ('RCL'.includes(kind) && kind) {
@@ -510,7 +510,7 @@
     for (const W of [...new Set(secs.map((s) => s.tapeW))].sort((a, b) => a - b)) {
       const t = types[W];
       // a gap after every section; the channel takes usable + one gap so the last section needs none
-      // TODO(pack) FFD can leave a near-empty channel (MONK panel: one 8 mm channel holds only a 16 mm section) that
+      // TODO(pack) FFD can leave a near-empty channel (seen on a test panel: one 8 mm channel held only a 16 mm section) that
       //   costs a whole feeder; try a few orderings / a small search when the channel count is one over a multiple of 3.
       const bins = ffd(secs.filter((s) => s.tapeW === W), (s) => s.tape + tp.opGap, usable + tp.opGap);
       const channels = bins.map((b) => {

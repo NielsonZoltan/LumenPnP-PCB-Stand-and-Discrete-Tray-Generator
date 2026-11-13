@@ -28,8 +28,8 @@ in a new `pnp_plan_core.js` (Node-testable like the stand core). A separate tool
 | Input | Source | Notes |
 |---|---|---|
 | Placements | `kicad-cli pcb export pos --format csv --units mm` (ref, value, footprint, x, y, rot, side) | Or read the .kicad_pcb the stand tab already parses, which avoids a second export. |
-| BOM fields | KiCad BOM CSV (`kicad-cli sch export bom`) with the Manufacturer/MPN fields `apply_mpn.py` writes | Joined to placements by ref. |
-| Reel grouping | Same rule as `bom_reels.py` (MS-07): one feed line per normalised (value, footprint) | Port the normaliser to JS, or have `bom_reels.py --json` emit the grouping. |
+| BOM fields | KiCad BOM CSV (`kicad-cli sch export bom`) with Manufacturer/MPN fields | Joined to placements by ref. |
+| Reel grouping | One feed line per normalised (value, footprint) | Done in JS (`pnp_tray_core.js`). |
 | Part heights | Footprint / 3D model height if available, else a package table | Needed for parts.xml and the nozzle tip. |
 
 ## Feed methods (per BOM line)

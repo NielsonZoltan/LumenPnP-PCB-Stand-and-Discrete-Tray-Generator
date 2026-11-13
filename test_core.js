@@ -134,7 +134,7 @@ const bomFile = process.argv[5];
 const bomCsv = bomFile ? fs.readFileSync(bomFile, 'utf8') : [
   '"Designator","Value","Footprint","Qty","DNP"',
   '"C1,C2,C3","100nF X7R","Capacitor_SMD:C_0402_1005Metric","3",""',
-  '"C4","0.1uF 16V","Capacitor_SMD:C_0402_1005Metric","1",""', // same reel as 100nF (MS-07 normalisation)
+  '"C4","0.1uF 16V","Capacitor_SMD:C_0402_1005Metric","1",""', // same reel as 100nF (value normalisation)
   '"R1,R2","4k7","Resistor_SMD:R_0402_1005Metric","2",""',
   '"R3","4.7k","Resistor_SMD:R_0402_1005Metric","1",""',
   '"U1","LM","Package_TO_SOT_SMD:SOT-23-5","1",""',
@@ -181,7 +181,7 @@ if (!bomFile) {
 // ---------------------------------------------------------------- DigiKey order + OpenPnP project
 const O = require('./pnp_openpnp_core.js');
 {
-  // a board with parts: the corner board if it was a real file (MONK has placements + fiducials), else the holes board
+  // a board with parts: the corner board if it was a real file (e.g. a panel with placements + fiducials), else the holes board
   const board = (cpcb.parts && cpcb.parts.length ? cpcb : pcb);
   if (!board.parts || !board.parts.length) console.log('skip OpenPnP checks: no .kicad_pcb with placements given');
   else {
