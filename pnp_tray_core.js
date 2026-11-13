@@ -47,7 +47,7 @@
     opLen: 120,         // Opulo feeder length (all widths)
     opUsable: 116,      // channel length that can hold parts (Opulo: 125 mm strip in the 120 mm feeder, 30 parts at 4 mm; guess)
     opOrient: 90,       // 90 = channels run front to back across the plate (bolts like A15 + G15), 180 = along the rows
-    opZ: 9.0,           // pick Z above the plate top. Host: tray feeders at Z 14.0-14.9 with the board top at 16.0 (8.6 + 1.6 above the plate): ~9 (teach it)
+    opZ: 10.7,          // pick Z above the plate top. Measured on a LumenPnP v3.1 (2 boards): picks at Z 14.9-15.2 with the plate top at 4.4 (board top 16.0 = 4.4 + 10 stand + 1.6): 10.5-10.8
   };
 
   // ------------------------------------------------------------------ BOM

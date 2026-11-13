@@ -238,7 +238,7 @@ td input[type=number] { width: 58px; }
         <label><span>Feeder types</span><input type="text" id="tp_opTypes" title="One per tape width: W:channels:width across[:channel pitch]. Opulo: 8 and 12 mm have 3 channels, 16 mm 2, 24 / 32 mm 1. 8 / 12 mm width and the 15 mm pitch from Opulo's CAD (the host's tray feeders sit 14.9 mm apart); 16 / 24 / 32 are guesses"></label>
         <label><span>Usable channel length</span><input type="number" id="tp_opUsable" step="1" min="10" title="Channel length that can hold parts (feeder 120 mm; Opulo cuts 125 mm strips, 30 parts at 4 mm; guess 116)"></label>
         <label><span>Feeder length</span><input type="number" id="tp_opLen" step="1"></label>
-        <label><span>Pick Z above plate</span><input type="number" id="tp_opZ" step="0.1" title="Tray feeder Z for OpenPnP. From the host's own tray feeders (Z 14.0-14.9 with the board top at 16.0): ~9. Teach it on the machine"></label>
+        <label><span>Pick Z above plate</span><input type="number" id="tp_opZ" step="0.1" title="Tray feeder pick Z for OpenPnP, above the plate top. Measured: 10.5-10.8 (picks at Z 14.9-15.2 with the plate top at 4.4). Check one feeder on the machine"></label>
       </details>
     </div>
     <div id="trayOnly">
