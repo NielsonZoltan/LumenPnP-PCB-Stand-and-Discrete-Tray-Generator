@@ -11,6 +11,10 @@ A single-page, offline tool for the [Opulo LumenPnP](https://github.com/opulo-in
   optionally fitted to the machine from taught fiducials;
 - prints a **placement map and loading list** for setting up the plates.
 
+![The planner: board on its stands, Opulo tray feeders around it, objects and properties on the right](docs/images/gui.png)
+
+![The four exported stand STLs in PrusaSlicer](docs/images/stands_prusaslicer.png)
+
 **Quick start:** clone, open `pnp_stand.html` in a browser (double-click it; it works offline). Open
 `pnp_stand.html#demo` to see a sample board. Node 18+ is only needed for the CLI and the tests.
 
